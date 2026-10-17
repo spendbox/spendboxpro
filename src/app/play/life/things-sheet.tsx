@@ -3,9 +3,11 @@
 import { announceGiftSent } from "../people/gift-pop";
 import { useCallback, useEffect, useState } from "react";
 import { cachedThings, loadThings } from "./things-cache";
+import { myCareer, type Career } from "../venture-actions";
+import { VENTURE_KIND_BY_ID, VENTURE_STAGES } from "@/lib/world/ventures";
 import { Building2, Check, Gem, House, MapPin, Pencil, ShoppingBag, Store, TrendingUp, X } from "lucide-react";
 import { renameUnit } from "../property-actions";
-import { CATEGORY_LABEL, effectWords, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
+import { CATEGORY_LABEL, effectWords, GUNS_SOON, LUXURY_FROM, MARKET_GOODS, MUSEUM_ART, mintOf, QUICK_SALE, SHOP, STEAL_MAX, CAUGHT_CHANCE, type ItemCategory, type ItemKind } from "@/lib/world/items";
 import { ItemArt } from "./item-art";
 import { PurchasePop } from "./purchase-pop";
 import { INCOME_DAY, type AssetUnit } from "@/lib/world/property-api";
@@ -17,15 +19,16 @@ import { useIncome, useLiveEarned } from "../income";
 import type { Earnings } from "@/app/api/earnings/route";
 import { Sheet } from "../sheet";
 
-// Your things (docs/ITEMS.md): what you own and the reputation it brings, the city's shop (cars
-// too), and your assets: the property you own and what it earns you, by itself (game-db/079).
+// Things (docs/ITEMS.md), three tabs: My things (what you own and the reputation it brings), My
+// assets (your business, and the property you own and what it earns you, by itself, game-db/079),
+// and the city's Shop (cars too).
 
 export type ThingsTab = "mine" | "shops" | "cars" | "assets";
 
 const TABS: { id: ThingsTab; label: string; icon: typeof Gem }[] = [
-  { id: "mine", label: "Mine", icon: Gem },
+  { id: "mine", label: "My things", icon: Gem },
+  { id: "assets", label: "My assets", icon: TrendingUp },
   { id: "shops", label: "Shop", icon: ShoppingBag },
-  { id: "assets", label: "Assets", icon: TrendingUp },
 ];
 
 /** A shop at a place: a market's stalls, or a museum's art. */
@@ -101,6 +104,7 @@ export function ThingsSheet({
       {tab === "shops" && <Shops startCars={start === "cars"} stall={stall} prices={prices} coins={coins} busy={busy} run={run} onBought={(k, paid) => setBought({ kind: k, paid })} />}
       {tab === "assets" && (
         <Assets
+          onLeave={onClose}
           units={units}
           whereIs={whereIs}
           onShow={onShow}
@@ -201,11 +205,13 @@ function ItemActions({ item, busy, to, setTo, run, done }: { item: MyItem; busy:
 
 /** The city's shop, cars included: buy new (reputation for fine things), or try to steal something small. */
 function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { startCars: boolean; stall?: Stall; prices: Prices; coins: number; busy: boolean; run: Run; onBought: (k: ItemKind, paid: number) => void }) {
-  const [cat, setCat] = useState<ItemCategory | "all" | "luxury">(startCars ? "car" : "all");
+  const [cat, setCat] = useState<ItemCategory | "all" | "luxury" | "guns">(startCars ? "car" : "all");
   const [risky, setRisky] = useState<string | null>(null);
   const cars = cat === "car";
   // Luxury: the ₦10m-and-up watches, bags, art and cars together, cheapest first.
-  const list = stall
+  const list = cat === "guns"
+    ? []
+    : stall
     ? STALLS[stall].ids.map((id) => SHOP.find((k) => k.id === id)).filter((k): k is ItemKind => !!k).sort((a, b) => a.price - b.price)
     : cat === "luxury"
       ? SHOP.filter((k) => k.price >= LUXURY_FROM).sort((a, b) => a.price - b.price)
@@ -214,15 +220,35 @@ function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { start
     <div className="mt-3">
       {stall && <p className="text-xs text-muted">{STALLS[stall].note}</p>}
       <div className={`-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 ${stall ? "hidden" : ""}`}>
-        {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness"] as const).map((c) => (
+        {(["all", "luxury", "car", "jewellery", "clothing", "gadget", "home", "art", "book", "fitness", "guns"] as const).map((c) => (
           <button key={c} onClick={() => setCat(c)} className={`h-8 shrink-0 rounded-full px-3 text-xs font-semibold ${cat === c ? "bg-ink text-white" : c === "luxury" ? "bg-gold/25 text-gold-dark" : "bg-ink/5"}`}>
-            {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : CATEGORY_LABEL[c]}
+            {c === "all" ? "All" : c === "luxury" ? "Luxury ✨" : c === "guns" ? "Guns · soon" : CATEGORY_LABEL[c]}
           </button>
         ))}
       </div>
       {cars && <p className="text-xs text-muted">A good car turns heads (reputation), and you can drive it round the city.</p>}
       {cat === "luxury" && <p className="text-xs text-muted">The finest watches, jewellery, art and cars in Lagos. The dearer it is, the more reputation it brings, for as long as you own it. Watches, jewellery and art also tend to gain value over time.</p>}
-      <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+      {cat === "guns" && (
+        <>
+          <p className="text-xs text-muted">Coming soon: guns, for the shooting range and for show. They&apos;ll be very dear. Look now, buy later.</p>
+          <ul className="mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5">
+            {GUNS_SOON.map((g) => (
+              <li key={g.id} className="flex items-center gap-3 px-3 py-2.5">
+                <ItemArt kind={g.id} category="gadget" size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{g.name}</p>
+                  <p className="truncate text-xs text-muted">{g.blurb}</p>
+                </div>
+                <span className="shrink-0 text-right">
+                  <span className="block text-xs font-bold tabular-nums">{cash(mintOf(g.price, prices))}</span>
+                  <span className="mt-0.5 block rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-gold-dark">Coming soon</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <ul className={`mt-2 divide-y divide-ink/5 rounded-2xl ring-1 ring-ink/5 ${list.length ? "" : "hidden"}`}>
         {list.map((k) => (
           <li key={k.id} className="flex items-center gap-3 px-3 py-2.5">
             <ItemArt kind={k.id} category={k.category} size={44} />
@@ -271,11 +297,14 @@ function Shops({ startCars, stall, prices, coins, busy, run, onBought }: { start
 
 /** Your assets: the property you own and what it earns you, by itself, going up as you watch. */
 function Assets({
+  onLeave,
   units,
   whereIs,
   onShow,
   onRename,
 }: {
+  /** Close Things (to open your business). */
+  onLeave?: () => void;
   units: AssetUnit[];
   whereIs?: (building: string) => string | null;
   onShow?: (u: AssetUnit) => void;
@@ -345,6 +374,8 @@ function Assets({
           </ul>
         )}
       </div>
+      <Businesses onOpen={onLeave} />
+      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-muted">Property</p>
       {owned.length === 0 ? (
         <p className="mt-3 rounded-2xl bg-ink/[0.04] px-4 py-6 text-center text-sm text-muted">
           No property yet{rooms ? " (your free room doesn't earn)" : ""}. Tap any building on the map and Buy: homes, shops and offices all pay you every day, by themselves.
@@ -375,6 +406,65 @@ function Assets({
           </p>
         ) : null;
       })()}
+    </div>
+  );
+}
+
+/** Your business (docs/LIFE_WHEEL.md): the one you run now, and the ones you ran before. Tap to open it. */
+function Businesses({ onOpen }: { onOpen?: () => void }) {
+  const [career, setCareer] = useState<Career | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void myCareer()
+      .then((c) => alive && setCareer(c))
+      .catch(() => alive && setCareer(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const open = () => {
+    window.dispatchEvent(new Event("nt-open-career"));
+    onOpen?.();
+  };
+  if (career === undefined) return <div className="mt-3 h-16 animate-pulse rounded-2xl bg-ink/5" />;
+  if (!career || career.missing) return null;
+  const v = career.open?.venture;
+  const kind = v ? VENTURE_KIND_BY_ID.get(v.kind) : null;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">Business</p>
+      {v ? (
+        <button onClick={open} className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-[#7048e8]/10 px-3 py-3 text-left hover:bg-[#7048e8]/15">
+          <span className="text-2xl">{kind?.emoji ?? "💼"}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold">{v.name}</span>
+            <span className="block text-xs text-muted">
+              {kind?.name ?? "Business"} · {VENTURE_STAGES[v.stage]?.name ?? ""} · {Math.round(v.customers).toLocaleString("en-GB")} {kind?.customers ?? "customers"}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <b className="block text-sm tabular-nums text-[#2b8a3e]">{cash(v.paid / career.perMint)}</b>
+            <span className="block text-[10px] text-muted">paid you</span>
+          </span>
+        </button>
+      ) : (
+        <button onClick={open} className="mt-2 w-full rounded-2xl bg-ink/[0.04] px-4 py-4 text-center text-sm text-muted hover:bg-ink/[0.07]">
+          No business running. <b className="text-ink">Start one</b>: a suya spot, a salon, a tech startup...
+        </button>
+      )}
+      {career.past.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {career.past.slice(0, 5).map((b) => (
+            <li key={b.startedAt} className="flex items-center gap-2 rounded-xl bg-ink/[0.03] px-3 py-2 text-xs">
+              <span>{VENTURE_KIND_BY_ID.get(b.kind)?.emoji ?? "💼"}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {b.name} <span className="text-muted">· closed, got to {VENTURE_STAGES[b.best]?.name ?? "Idea"}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-muted">{cash(b.paid / career.perMint)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

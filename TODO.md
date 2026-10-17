@@ -1,6 +1,10 @@
 # To do
 
 ## Now (owner)
+- [ ] **Launch Ready: 1,000 Players**: the fixes before opening to 1,000 players (money cheats, stuck games, cost, phone speed), in docs/LAUNCH_FIXES.md.
+- [ ] Then run `game-db/121_games_cost.sql` (games cost money to play: ₦1,000 a go, the shooting range and paintball ₦5,000, chess and draughts ₦2,000; the older room games stop paying out). Run it after 120. Until then games are free to play (and pay nothing).
+- [ ] Then run `game-db/122_host_games.sql` (Play: hosting a game costs ₦20,000 for two-player games and ₦100,000 for the rest, 3 minutes to join, and "I'm next" lines). Run it after 121. Until then Play still works, with the old challenge fee rules.
+- [ ] Then run `game-db/123_scheduled_games.sql` (**Police & Thieves**, every 8 hours: free sign-ups on even sides, the Armoury, the pool and paying the winners; docs/POLICE_THIEVES.md). Run it after 122, once you're happy with the sample games: running it is what switches the scheduled games on. Until then the lobby says they're switched on soon; sample games (bots, or friends with a code) work.
 - [ ] Then run `game-db/118_club_fees.sql` (clubs cost ₦250k, ₦500k, ₦1m or ₦10m at the door). Run it after 117. Until then a door can charge at most about ₦1.5m, so the ₦10m clubs charge ₦1.5m.
 - [ ] Then run `game-db/117_written_moments.sql` (player-written moments, and how moments are doing on the dashboard). Run it after 116. Until then Write a moment says it's switched on soon.
 - [ ] Then run `game-db/116_player_stories.sql` (other players in your story: loans, lifts, vouching, the wallet). Run it after 115. Until then no other player turns up in anyone's moments.
@@ -178,12 +182,13 @@ Each phase is built in one go (a few hours to a couple of days); writing the sto
 
 **Phase 7: the freshness engine.** Built (the engine; the writing goes on).
 - [x] Moments built from parts: 8 templates, 100 to 480 ways each.
-- [x] The Lagos calendar (22 seasons and days) with 22 seasonal moments; 9 moments for parts of the city; 7 for who you are.
+- [x] The Lagos calendar (22 seasons and days) with 33 seasonal moments; 17 moments for parts of the city; 12 for who you are.
 - [x] Player-written moments: write, automatic checks, votes, approval on the dashboard, ₦50,000 to the author (game-db/117).
 - [ ] Open Write a moment to players (built; Me → Write a moment says "coming soon" for now, and it's listed under Coming soon). To open it: in `src/app/play/game.tsx` point that item back at the WriteSheet (`./moments/write-sheet.tsx`).
 - [x] On the dashboard: how every moment is doing (came, walked away, met again, top answer).
-- [x] 16 templates and over 5,000 versions of moments in all; 70 things in the shop, each with its own moment, and 23 answers your things give you in everyday moments.
+- [x] 26 templates and about 8,900 versions of moments in all (368 moments); 70 things in the shop, each with its own moment, and 23 answers your things give you in everyday moments.
 - [x] More often: up to 8 a day, at least 12 minutes apart, the road on 1 trip in 3.
+- [x] 62 more moments: 10 templates (okada, keke, bus stop, owambe, NEPA, the compound, suya, the beach, the barber's, the viewing centre), 14 on the road, 11 for the calendar, 8 for parts of the city (Festac, Badagry, Epe, Banana Island, Eko Atlantic, Ibeju-Lekki, Agege, Maryland), 5 for who you are, 14 for your things.
 - [ ] Many more templates (aim: about 80, for about 16,000 versions), and 20 to 30 new moments every month (AI drafts, owner reviews).
 - [ ] Owner, every month: read "How moments are doing" on the dashboard, and rewrite or retire the weakest.
 
@@ -198,6 +203,10 @@ with; whether a business can fail completely; how big business income can get.
   door is closed to strangers (they knock), friends walk in, and a home party opens it to all. About 1 day.
 
 ## Done lately
+- [ ] **Owner: run these in Supabase (SQL editor), in order:** `game-db/119_road_moments.sql` (road moments come more often) and `game-db/120_restaurant_orders.sql` (paying for food at a table). Until 120 is run, ordering says "Paying for food is switched on soon."
+- [x] Guns in the shop (Guns · soon): nine, drawn, very dear, coming soon. Past the edge of the map: forest, then hills and mountains (the sea stays sea). Bigger Ferris wheels (25 m across, 16 gondolas, lights) with a ride button at every wheel (₦3,000); water parks with 20 m and 15 m towers and four long slides from six designs (Mega Twister, Free Fall or Kamikaze, Wave Rider, Anaconda or the Black Hole tube), slides ₦1,500. Shooting ranges in some neighbourhoods (six lanes inside; "Shoot at the range"). In homes, no window or curtains behind a TV, the stairs or a wardrobe; the stairs go up through a stairwell.
+- [x] Streets are straight again (the winding streets are undone; hawkers now stand on the straight kerbs). The trip film's two junctions go left, right or straight on, a different way each trip. Plazas are one of eight squares (statue, fountain, clock tower, bandstand, sculpture, shady umbrella tables, flags, chessboard). Things has three tabs: My things, My assets (now with your business, open and past), Shop. The market's goods and the museum's art all have their own drawings.
+- [x] Eating out (docs/FOOD.md): sit at a table, order up to 6 things from 13 Nigerian dishes and 8 drinks at Lagos prices (dearer in a hotel, club or mall), pay from your money, and a waiter walks over with a tray and fills your table.
 - [x] Search has a Budget row (Any, I can afford, under ₦5m / ₦20m / ₦50m / ₦250m / ₦1bn): it lists the homes and landmarks you could buy, cheapest first; landmarks show their price in search. Closing the walkthrough halfway leaves a small ? button to carry on where it was. Town Hall refreshes every 6 seconds (was 3) to save data. The search box now also finds the names players gave buildings and businesses straight away.
 - [x] Landmarks: every one has a big name sign in front of its gate (nothing in front of it, a photo spot); going into one, you arrive at its entrance (Photo, Go inside). Unilag's campus faces its gate (no second gate); LUTH is a teaching hospital's grounds (8 × 7); the big landmarks are near their real size (most 4 to 10 tiles), drawn to fill their grounds. Fun places (clubs, restaurants, stadiums, funfairs, malls, parks...) show a little icon on the map from further out than the names.
 - [ ] Players who bought a building where a landmark has now grown keep it (it still stands, inside the landmark's grounds). Check `game-db` property against the new landmark sizes if any complain.

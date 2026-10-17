@@ -1,5 +1,5 @@
-// The water park (a 2×2 landmark): a big lagoon pool, a landing pool and a kids' pool, two
-// slide towers with stairs, two or three twisting slides (open half-pipes you can ride down),
+// The water park (a 2×2 landmark): a big lagoon pool, a landing pool and a kids' pool, two tall
+// slide towers with stairs (20 m and 15 m), four long slides from six designs (open half-pipes you can ride down),
 // loungers and umbrellas, a snack kiosk, palms, and people splashing about in rubber rings.
 // The slides' paths are pure maths from the tile, so the city draws them, and the slide ride
 // follows exactly the same curve.
@@ -10,12 +10,13 @@ import { Kit, shadeHex } from "./kit";
 
 type BoxFn = (dx: number, y: number, dz: number, sx: number, sy: number, sz: number, color: number, ry?: number, mesh?: string, tilt?: number) => void;
 
-export type Slide = { name: string; color: number; points: THREE.Vector3[]; curve: THREE.CatmullRomCurve3; pool: { x: number; z: number; y: number } };
+export type Slide = { name: string; /** The park's corner tile. */ tile: number; color: number; points: THREE.Vector3[]; curve: THREE.CatmullRomCurve3; pool: { x: number; z: number; y: number }; /** A closed tube (dark inside), not an open half-pipe. */ tube?: boolean };
 
-const SLIDE_COLORS = [0xff6b6b, 0x4dabf7, 0xffd43b, 0x69db7c, 0xda77f2, 0xff922b];
+const SLIDE_COLORS = [0xff6b6b, 0x4dabf7, 0xffd43b, 0x69db7c, 0xda77f2, 0xff922b, 0x20c997, 0x343a40];
+/** Two big slide towers (tiles: 1 = 10 m): 20 m and 15 m up. */
 const TOWERS = [
-  { x: 1.15, z: -0.2, h: 0.85, roof: 0xff6b6b },
-  { x: 0.2, z: -0.25, h: 0.6, roof: 0x4dabf7 },
+  { x: 1.15, z: -0.2, h: 2.0, roof: 0xff6b6b },
+  { x: 0.2, z: -0.25, h: 1.5, roof: 0x4dabf7 },
 ];
 const POOLS = {
   lagoon: { x: 0.05, z: 1.0, w: 0.95, d: 0.7 },
@@ -24,37 +25,81 @@ const POOLS = {
 };
 const WATER_Y = 0.1;
 
-/** The slides of the water park whose corner tile is t (city coordinates). */
+/**
+ * The slides of the water park whose corner tile is t (city coordinates). Six designs, each park
+ * its own four: from the tall tower, the Mega Twister (four turns of a helix) and either Free Fall
+ * (a near-vertical drop and a long run-out) or the Kamikaze (a long straight over big bumps); from
+ * the other tower, the Wave Rider (six S-bends) and either the Anaconda (a long loop down the
+ * west side) or the Black Hole (the same, in a closed tube). 70 to 120 m each: a ride of 8 to 12 s.
+ */
 export function waterparkSlides(t: Tile, parkName: string): Slide[] {
   const X = t.x;
   const Z = t.z;
   const out: Slide[] = [];
   const p = (x: number, y: number, z: number) => new THREE.Vector3(X + x, y, Z + z);
-  // The Twister: one and a half turns round a helix, then down into the landing pool.
-  {
-    const pts = [p(1.15, TOWERS[0].h + 0.1, -0.08)];
-    const cx = 1.05;
-    const cz = 0.35;
-    const a0 = Math.atan2(-0.43, 0.1);
-    const n = 18;
-    for (let i = 0; i <= n; i++) {
-      const a = a0 + (i / n) * Math.PI * 3;
-      pts.push(p(cx + Math.cos(a) * 0.25, TOWERS[0].h + 0.06 - (i / n) * 0.6, cz + Math.sin(a) * 0.25));
+  const pick = (k: number) => SLIDE_COLORS[Math.floor((t.r[0] * 7 + k * 3) % SLIDE_COLORS.length)];
+  const push = (name: string, color: number, pts: THREE.Vector3[], pool: { x: number; z: number }, tube = false) =>
+    out.push({ name, tile: t.i, color, points: pts, curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), pool: { x: X + pool.x, z: Z + pool.z, y: WATER_Y }, tube });
+  const helix = (pts: THREE.Vector3[], cx: number, cz: number, r: number, turns: number, y0: number, y1: number, from: { x: number; z: number }, dir = 1) => {
+    const a0 = Math.atan2(from.z - cz, from.x - cx);
+    const n = Math.round(turns * 14);
+    for (let i = 1; i <= n; i++) {
+      const a = a0 + dir * (i / n) * Math.PI * 2 * turns;
+      pts.push(p(cx + Math.cos(a) * r, y0 + (y1 - y0) * (i / n), cz + Math.sin(a) * r));
     }
-    pts.push(p(1.02, 0.2, 0.78), p(1.05, 0.13, 0.95), p(1.06, WATER_Y + 0.01, 1.08));
-    out.push({ name: "The Twister", color: SLIDE_COLORS[0], points: pts, curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), pool: { x: X + 1.06, z: Z + 1.12, y: WATER_Y } });
-  }
-  // Wave Rider: big S-bends from the smaller tower into the lagoon.
+  };
+  const T0 = TOWERS[0];
+  const T1 = TOWERS[1];
+  // ---- the tall tower
   {
-    const h = TOWERS[1].h + 0.1;
-    const pts = [p(0.2, h, -0.12), p(0.36, h - 0.07, 0.04), p(0.58, h - 0.15, 0.16), p(0.64, h - 0.23, 0.36), p(0.5, h - 0.31, 0.5), p(0.33, h - 0.39, 0.6), p(0.24, 0.15, 0.73), p(0.2, WATER_Y + 0.01, 0.88)];
-    out.push({ name: "Wave Rider", color: SLIDE_COLORS[1], points: pts, curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), pool: { x: X + 0.18, z: Z + 0.98, y: WATER_Y } });
+    // The Mega Twister: four turns round a helix beside the tower, then into the landing pool.
+    const top = T0.h + 0.1;
+    const pts = [p(T0.x, top, T0.z + 0.08), p(T0.x - 0.02, top - 0.04, T0.z + 0.22)];
+    helix(pts, 1.1, 0.42, 0.28, 4, top - 0.1, 0.32, { x: T0.x - 0.02, z: T0.z + 0.22 });
+    pts.push(p(1.1, 0.2, 0.82), p(1.06, WATER_Y + 0.01, 1.0));
+    push("The Mega Twister", pick(0), pts, { x: 1.06, z: 1.05 });
   }
-  // Free Fall: a steep, bumpy drop off the other side (bigger parks only).
-  if (t.r[1] > 0.35) {
-    const h = TOWERS[1].h + 0.1;
-    const pts = [p(0.08, h, -0.28), p(-0.12, h - 0.05, -0.3), p(-0.3, h - 0.2, -0.2), p(-0.4, h - 0.28, 0.0), p(-0.42, h - 0.4, 0.22), p(-0.38, 0.17, 0.45), p(-0.3, WATER_Y + 0.01, 0.74)];
-    out.push({ name: "Free Fall", color: SLIDE_COLORS[2], points: pts, curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), pool: { x: X - 0.28, z: Z + 0.86, y: WATER_Y } });
+  if (t.r[1] > 0.5) {
+    // Free Fall: off the back of the tower, a near-vertical drop, a long run-out down the east side.
+    const top = T0.h + 0.1;
+    const pts = [p(T0.x + 0.08, top, T0.z), p(1.36, top - 0.05, -0.3), p(1.44, top - 0.4, -0.32), p(1.46, 0.5, -0.25), p(1.47, 0.32, -0.05)];
+    for (let k = 1; k <= 6; k++) pts.push(p(1.47, 0.32 - k * 0.025, -0.05 + k * 0.15));
+    pts.push(p(1.32, 0.16, 0.92), p(1.22, WATER_Y + 0.01, 1.08));
+    push("Free Fall", pick(1), pts, { x: 1.2, z: 1.1 });
+  } else {
+    // The Kamikaze: straight down the east side over three big bumps.
+    const top = T0.h + 0.1;
+    const pts = [p(T0.x + 0.08, top, T0.z), p(1.38, top - 0.08, -0.32)];
+    const n = 24;
+    for (let i = 1; i <= n; i++) {
+      const u = i / n;
+      pts.push(p(1.46, 0.18 + (top - 0.3) * (1 - u) ** 1.3 + 0.16 * Math.abs(Math.sin(u * Math.PI * 3)) * (1 - u), -0.3 + u * 1.15));
+    }
+    pts.push(p(1.3, 0.14, 0.98), p(1.2, WATER_Y + 0.01, 1.1));
+    push("The Kamikaze", pick(1), pts, { x: 1.2, z: 1.1 });
+  }
+  // ---- the other tower
+  {
+    // The Wave Rider: six S-bends down into the lagoon.
+    const top = T1.h + 0.1;
+    const pts = [p(T1.x, top, T1.z + 0.12)];
+    const n = 6;
+    for (let i = 1; i <= n * 4; i++) {
+      const u = i / (n * 4);
+      pts.push(p(0.22 + Math.sin(u * Math.PI * n) * 0.2, top - 0.05 - (top - 0.25) * u, T1.z + 0.12 + u * 0.8));
+    }
+    pts.push(p(0.2, 0.17, 0.78), p(0.2, WATER_Y + 0.01, 0.9));
+    push("The Wave Rider", pick(2), pts, { x: 0.18, z: 0.98 });
+  }
+  {
+    // The Anaconda (open) or the Black Hole (a closed tube): out west, three turns round a big
+    // loop, and into the far end of the lagoon.
+    const tube = t.r[2] > 0.5;
+    const top = T1.h + 0.1;
+    const pts = [p(T1.x - 0.08, top, T1.z), p(-0.1, top - 0.06, -0.38)];
+    helix(pts, -0.22, 0.15, 0.22, 3, top - 0.12, 0.3, { x: -0.1, z: -0.38 }, -1);
+    pts.push(p(-0.36, 0.2, 0.62), p(-0.3, WATER_Y + 0.01, 0.8));
+    push(tube ? "The Black Hole" : "The Anaconda", tube ? 0x343a40 : pick(3), pts, { x: -0.28, z: 0.9 }, tube);
   }
   for (const s of out) s.name = `${s.name} · ${parkName}`;
   return out;
@@ -137,8 +182,9 @@ export function waterparkParts(t: Tile, B: BoxFn, tree: (dx: number, dz: number,
 }
 
 /** An open half-pipe along a curve: radius r, n steps; points scaled by k about `origin`. */
-function troughGeometry(curve: THREE.CatmullRomCurve3, r: number, n: number, k = 1, origin = new THREE.Vector3(), color = 0xff6b6b) {
-  const M = 12;
+function troughGeometry(curve: THREE.CatmullRomCurve3, r: number, n: number, k = 1, origin = new THREE.Vector3(), color = 0xff6b6b, tube = false) {
+  const M = tube ? 20 : 12;
+  const span = tube ? Math.PI * 2 : 2.9;
   const pos: number[] = [];
   const col: number[] = [];
   const idx: number[] = [];
@@ -157,12 +203,12 @@ function troughGeometry(curve: THREE.CatmullRomCurve3, r: number, n: number, k =
     down.crossVectors(side, tg).normalize().negate();
     // The bottom of the trough is the curve; the walls rise to either side.
     for (let j = 0; j <= M; j++) {
-      const a = -1.45 + (j / M) * 2.9;
+      const a = -span / 2 + (j / M) * span;
       const x = (p.x - origin.x) * k + (side.x * Math.sin(a) - down.x * (1 - Math.cos(a))) * r;
       const y = (p.y - origin.y) * k + (side.y * Math.sin(a) - down.y * (1 - Math.cos(a))) * r;
       const z = (p.z - origin.z) * k + (side.z * Math.sin(a) - down.z * (1 - Math.cos(a))) * r;
       pos.push(x, y, z);
-      const s = j === 0 || j === M ? stripe : c;
+      const s = tube ? (j % 5 === 0 ? stripe : c) : j === 0 || j === M ? stripe : c;
       col.push(s.r, s.g, s.b);
     }
   }
@@ -214,7 +260,7 @@ export function createWaterpark(t: Tile, parkName: string) {
   const waterMat = new THREE.MeshBasicMaterial({ color: 0xa5e3ff, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
   const geos: THREE.BufferGeometry[] = [];
   for (const s of slides) {
-    const g = troughGeometry(s.curve, 0.05, Math.ceil(s.curve.getLength() * 40), 1, undefined, s.color);
+    const g = troughGeometry(s.curve, 0.05, Math.ceil(s.curve.getLength() * 40), 1, undefined, s.color, s.tube);
     geos.push(g);
     const m = new THREE.Mesh(g, slideMat);
     m.castShadow = true;
@@ -296,7 +342,7 @@ export function createSlideRide(slide: Slide) {
   const group = new THREE.Group();
   const origin = slide.points[0].clone();
   const K = 10;
-  const trough = troughGeometry(slide.curve, 0.55, Math.ceil(slide.curve.getLength() * 90), K, origin, slide.color);
+  const trough = troughGeometry(slide.curve, 0.55, Math.ceil(slide.curve.getLength() * 90), K, origin, slide.color, slide.tube);
   const water = waterRibbon(slide.curve, 0.5, 0.06, Math.ceil(slide.curve.getLength() * 60), K, origin);
   const troughMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true });
   const waterMat = new THREE.MeshBasicMaterial({ color: 0xc5f6fa, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });

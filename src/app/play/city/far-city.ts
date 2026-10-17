@@ -5,6 +5,8 @@
 //   far: one flat painted map of the whole region and the land round it (2 triangles), so the
 //   horizon is never empty.
 // Only for real places (src/lib/world): their map says what's land, water and road everywhere.
+// Beyond the map (places the game doesn't have), the land is wild: low-detail forest near the
+// edge, rolling hills and then mountains further out; the sea carries on as water.
 
 import * as THREE from "three";
 import { hash, roughAt, smoothNoise, type CityPlan } from "@/lib/city/layout";
@@ -32,7 +34,7 @@ const COLORS = {
   town: [0xdb, 0xd4, 0xc5],
   suburb: [0xcf, 0xd8, 0xb5],
   green: [0xa8, 0xd0, 0x92],
-  country: [0xb9, 0xcf, 0x9a],
+  country: [0x86, 0xb0, 0x6c],
 };
 
 /** A unit box standing on y = 0, without its bottom face. */
@@ -68,6 +70,102 @@ export function createFarCity(parent: THREE.Object3D) {
   map.userData.name = "farMap";
   map.visible = false;
   group.add(map);
+  // ---- the wilds beyond the map: forest trees round the camera, mountains far out.
+  const MAX_TREES = 5000;
+  const treeGeo = new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.62, 0);
+  const pineGeo = new THREE.ConeGeometry(0.42, 1.3, 6).translate(0, 0.65, 0);
+  const wildMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const trees = new THREE.InstancedMesh(treeGeo, wildMat, MAX_TREES);
+  const pines = new THREE.InstancedMesh(pineGeo, wildMat, MAX_TREES);
+  for (const m of [trees, pines]) {
+    m.count = 0;
+    m.frustumCulled = false;
+    m.userData.name = "farWilds";
+    group.add(m);
+  }
+  const MAX_PEAKS = 320;
+  const peaks = new THREE.InstancedMesh(new THREE.ConeGeometry(0.5, 1, 7, 2).translate(0, 0.5, 0), wildMat, MAX_PEAKS);
+  peaks.count = 0;
+  peaks.frustumCulled = false;
+  peaks.userData.name = "farPeaks";
+  group.add(peaks);
+  let peaksFor: CityPlan | null = null;
+  /** Off the map at (x, z): land or water (the sea carries on out from the coast), or null on the map. */
+  const wildAt = (region: NonNullable<CityPlan["region"]>, x: number, z: number): "land" | "water" | null => {
+    if (region.inside(x, z)) return null;
+    const b = region.bounds;
+    const ex = Math.max(b.x0, Math.min(b.x1, x));
+    const ez = Math.max(b.z0, Math.min(b.z1, z));
+    const w = region.waterAt(ex, ez);
+    if (w === 2 || (w === 1 && Math.hypot(x - ex, z - ez) < 6)) return "water";
+    return "land";
+  };
+  /** How far (tiles) outside the map's box a point is. */
+  const outBy = (region: NonNullable<CityPlan["region"]>, x: number, z: number) => {
+    const b = region.bounds;
+    return Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.z0 - z, 0, z - b.z1));
+  };
+  /** Hills and mountains round the map, on land, taller the further out. Once per map. */
+  function buildPeaks(plan: CityPlan) {
+    const region = plan.region!;
+    const b = region.bounds;
+    let n = 0;
+    const leaf = new THREE.Color();
+    for (let k = 0; k < 6000 && n < MAX_PEAKS; k++) {
+      const x = b.x0 - MAP_MARGIN + hash(k, 1, 6161) * (b.x1 - b.x0 + 2 * MAP_MARGIN);
+      const z = b.z0 - MAP_MARGIN + hash(k, 2, 6161) * (b.z1 - b.z0 + 2 * MAP_MARGIN);
+      const d = outBy(region, x, z);
+      if (d < 22 || wildAt(region, Math.round(x), Math.round(z)) !== "land") continue;
+      if (smoothNoise(x / 30, z / 30, 6262) < 0.45) continue;
+      const far = Math.min(1, (d - 22) / 100);
+      const h = (2 + far * 14) * (0.6 + hash(k, 3, 6161) * 0.8);
+      const r = h * (1.7 + hash(k, 4, 6161) * 0.8);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), hash(k, 5, 6161) * Math.PI);
+      m4.compose(pos.set(x, -0.3, z), q, scale.set(r, h, r * (0.8 + hash(k, 6, 6161) * 0.4)));
+      peaks.setMatrixAt(n, m4);
+      // Green hills near, blue-grey rock on the big ones far off.
+      leaf.setHex(0x5f8f4a).lerp(color.setHex(0x7d8a8f), far * 0.8).multiplyScalar(0.85 + hash(k, 7, 6161) * 0.25);
+      peaks.setColorAt(n, leaf);
+      n++;
+    }
+    q.identity();
+    peaks.count = n;
+    peaks.instanceMatrix.needsUpdate = true;
+    if (peaks.instanceColor) peaks.instanceColor.needsUpdate = true;
+  }
+  /** Forest off the map round (cx, cz), near and middle rings both. */
+  function buildForest(plan: CityPlan, cx: number, cz: number) {
+    const region = plan.region!;
+    let nt = 0;
+    let np = 0;
+    const R = FAR_BLOCKS;
+    for (let x = cx - R; x <= cx + R; x += 2) {
+      for (let z = cz - R; z <= cz + R; z += 2) {
+        if (wildAt(region, x, z) !== "land") continue;
+        // Clearings now and then, and none hard up against the map's edge.
+        if (smoothNoise(x / 11, z / 11, 6363) < 0.32 || hash(x, z, 6364) < 0.15) continue;
+        if (!wildAt(region, x + 2, z) || !wildAt(region, x - 2, z) || !wildAt(region, x, z + 2) || !wildAt(region, x, z - 2)) continue;
+        const pine = hash(x, z, 6365) < 0.2;
+        if ((pine ? np : nt) >= MAX_TREES) continue;
+        const sz = 1.1 + hash(x, z, 6366) * 1.2;
+        m4.compose(pos.set(x + (hash(x, z, 6367) - 0.5) * 1.4, -0.02, z + (hash(x, z, 6368) - 0.5) * 1.4), q, scale.set(sz * 1.5, sz, sz * 1.5));
+        color.setHex(pine ? 0x2f6b3a : 0x3f8f45).multiplyScalar(0.8 + hash(x, z, 6369) * 0.35);
+        if (pine) {
+          pines.setMatrixAt(np, m4);
+          pines.setColorAt(np++, color);
+        } else {
+          trees.setMatrixAt(nt, m4);
+          trees.setColorAt(nt++, color);
+        }
+      }
+    }
+    trees.count = nt;
+    pines.count = np;
+    for (const m of [trees, pines]) {
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+  }
   let mapFor: CityPlan | null = null;
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -173,6 +271,11 @@ export function createFarCity(parent: THREE.Object3D) {
         mapFor = plan;
       }
       const region = plan.region;
+      if (peaksFor !== plan) {
+        buildPeaks(plan);
+        peaksFor = plan;
+      }
+      buildForest(plan, cx, cz);
       let n = 0;
       const put = (x: number, z: number, size: number) => {
         // A 2×2 block takes its tallest tile's height, and sits over all four.
@@ -256,6 +359,10 @@ export function createFarCity(parent: THREE.Object3D) {
       decks.geometry.dispose();
       (decks.material as THREE.Material).dispose();
       blockMat.dispose();
+      treeGeo.dispose();
+      pineGeo.dispose();
+      peaks.geometry.dispose();
+      wildMat.dispose();
       map.geometry.dispose();
       mapMat.map?.dispose();
       mapMat.dispose();

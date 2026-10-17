@@ -311,8 +311,51 @@ function bank(t: Tile, B: BoxFn, tree: TreeFn) {
 
 /** A big city park: lawns, a lake with an island fountain, a bandstand, paths, flower beds,
  * benches, a statue and lots of trees. */
+/** A paintball park: a netted field of bright inflatable bunkers on astroturf, flags at each end. */
+function paintballPark(t: Tile, B: BoxFn, tree: TreeFn) {
+  const st = t.structure!;
+  const w = st.w ?? 3;
+  const d = st.d ?? 3;
+  const cx = (w - 1) / 2;
+  const cz = (d - 1) / 2;
+  B(cx, 0.02, cz, w - 0.04, 0.07, d - 0.04, 0x9fd38c, 0, "ground");
+  // The field: turf in stripes, a red end and a blue end, white lines.
+  const fw = w - 0.7;
+  const fd = d - 0.8;
+  for (let k = 0; k < 8; k++) B(cx - fw / 2 + ((k + 0.5) * fw) / 8, 0.09, cz, fw / 8 + 0.002, 0.006, fd, k % 2 ? 0x3f9a3b : 0x48a845, 0, "ground");
+  B(cx - fw / 2 + 0.08, 0.097, cz, 0.16, 0.003, fd, 0xff8787, 0, "paint");
+  B(cx + fw / 2 - 0.08, 0.097, cz, 0.16, 0.003, fd, 0x74c0fc, 0, "paint");
+  B(cx, 0.097, cz, 0.012, 0.003, fd, 0xffffff, 0, "paint");
+  // Inflatable bunkers, mirrored end to end.
+  const cols = [0xffd43b, 0xff922b, 0x20c997, 0xf06595, 0x845ef7];
+  const half: [number, number, string, number][] = [[-0.36, -0.28, "cyl", 0.12], [-0.3, 0.25, "building", 0.1], [-0.18, 0, "cone", 0.14], [-0.1, -0.36, "building", 0.08], [-0.42, 0.05, "cyl", 0.1]];
+  half.forEach(([fx, fz, mesh, h], k) => {
+    for (const side of [-1, 1]) {
+      const x = cx + side * fx * fw;
+      const z = cz + side * fz * fd;
+      B(x, 0.095, z, mesh === "building" ? 0.22 : 0.12, h, mesh === "building" ? 0.08 : 0.12, cols[k % cols.length], 0, mesh);
+    }
+  });
+  B(cx, 0.095, cz, 0.16, 0.16, 0.16, 0xffd43b, 0, "cone");
+  // Tall nets on poles round it.
+  for (const side of [-1, 1]) {
+    B(cx, 0.09, cz + side * (fd / 2 + 0.06), fw + 0.12, 0.34, 0.01, 0x343a40, 0, "glass");
+    B(cx + side * (fw / 2 + 0.06), 0.09, cz, 0.01, 0.34, fd + 0.12, 0x343a40, 0, "glass");
+  }
+  for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B(cx + px * (fw / 2 + 0.06), 0.09, cz + pz * (fd / 2 + 0.06), 0.025, 0.4, 0.025, 0x343a40, 0, "cyl");
+  // Team flags, a shed for the markers and masks, trees along the edge.
+  B(cx - fw / 2 - 0.18, 0.09, cz, 0.015, 0.5, 0.015, 0x495057, 0, "cyl");
+  B(cx - fw / 2 - 0.18, 0.5, cz + 0.07, 0.01, 0.08, 0.14, 0xe03131);
+  B(cx + fw / 2 + 0.18, 0.09, cz, 0.015, 0.5, 0.015, 0x495057, 0, "cyl");
+  B(cx + fw / 2 + 0.18, 0.5, cz + 0.07, 0.01, 0.08, 0.14, 0x1c7ed6);
+  B(cx, 0.09, cz + d / 2 - 0.22, 0.6, 0.22, 0.2, 0xfff4e6);
+  B(cx, 0.31, cz + d / 2 - 0.22, 0.7, 0.08, 0.28, 0xe03131, 0, "roof");
+  for (let x = 0; x < w; x++) tree(x, -0.3, 0.35, t.r[x & 3] + x * 0.21);
+}
+
 function bigpark(t: Tile, B: BoxFn, tree: TreeFn) {
   const st = t.structure!;
+  if (/paintball/i.test(st.name ?? "")) return paintballPark(t, B, tree);
   const w = st.w ?? 5;
   const d = st.d ?? 5;
   const cx = (w - 1) / 2;

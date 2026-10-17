@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonLink } from "./people/open-person";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, MapPin, MessageCircle, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -169,11 +170,15 @@ export function PeopleHere({
           return (
             <li key={p.id} className="flex items-center gap-2 rounded-xl px-1 py-0.5">
               <span className="relative shrink-0">
-                <AvatarFace avatar={p.avatar} size={30} className="rounded-full" />
+                <PersonLink id={p.id} className="hover:no-underline">
+                  <AvatarFace avatar={p.avatar} size={30} className="rounded-full" />
+                </PersonLink>
                 {fresh.includes(p.id) && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-[#ff4fd8] ring-2 ring-white" aria-label="just arrived" />}
               </span>
               <span className="min-w-0 flex-1">
-                <b className="block truncate text-xs sm:text-sm">{p.name}</b>
+                <PersonLink id={p.id} className="block w-full">
+                  <b className="block truncate text-xs sm:text-sm">{p.name}</b>
+                </PersonLink>
                 {st === "friend" && <span className="text-[11px] font-semibold text-[#2b8a3e] sm:text-xs">Your friend</span>}
               </span>
               {greet?.(p)}

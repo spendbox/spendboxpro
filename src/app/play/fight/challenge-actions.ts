@@ -8,7 +8,7 @@ import { notifyMany } from "@/lib/notify-many";
 import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
-import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, NEAR_TILES, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, minPlayers, stakeBounds } from "@/lib/world/challenges";
+import { CHALLENGE_COOLDOWN_SECS, CHALLENGE_FEE_NAIRA, HOST_JOIN_SECS, NEAR_TILES, hostFeeNaira, isTableGame, STAKE_MAX_NAIRA, STAKE_MIN_NAIRA, challengeGame, cleanStake, minPlayers, stakeBounds } from "@/lib/world/challenges";
 import { tidy } from "@/lib/world/value";
 
 // Challenges on the map (docs/CHALLENGES.md; the database part is game-db/070_challenges.sql).
@@ -33,6 +33,7 @@ function say(message: string): Fail {
   if (code === "unknown_target" || code === "self") return { ok: false, error: "That player can't play right now." };
   if (code === "need_players") return { ok: false, error: "Wait for someone to join first." };
   if (code === "not_host") return { ok: false, error: "Only the host can start it." };
+  if (code === "already_in") return { ok: false, error: "You're already playing in that one." };
   if (missing(message)) return { ok: false, error: OFF };
   console.error("Challenge failed", message);
   return { ok: false, error: "That didn't work. Try again." };
@@ -94,6 +95,99 @@ export async function myChallengeRep(): Promise<{ hosted: number; won: number } 
   return repOf(createAdminClient(), userId);
 }
 
+/** Players within reach of a spot (not you): from the kept positions (game-db/102), else the old way. */
+async function nearbyPeople(db: ReturnType<typeof createAdminClient>, region: string, x: number, z: number, userId: string): Promise<string[]> {
+  const box = await db
+    .from("lives")
+    .select("user_id")
+    .eq("region", region)
+    .neq("user_id", userId)
+    .gte("at_x", x - NEAR_TILES)
+    .lte("at_x", x + NEAR_TILES)
+    .gte("at_z", z - NEAR_TILES)
+    .lte("at_z", z + NEAR_TILES)
+    .limit(2000);
+  if (!box.error) return ((box.data ?? []) as { user_id: string }[]).map((l) => l.user_id);
+  const { data: lives } = await db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000);
+  return ((lives ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[])
+    .filter((l) => {
+      const s = spotOf(l.at_place ?? l.home_unit);
+      return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
+    })
+    .map((l) => l.user_id)
+    .slice(0, 60);
+}
+
+/**
+ * Play: host one of the table games right here, now (game-db/122 challenge_host). Hosting costs a
+ * fee (src/lib/world/challenges.ts hostFeeNaira); the stake (optional) goes into the pool. Everyone
+ * nearby gets a notice (kind "game:<id>", which reads as ended once the game is over, see
+ * src/lib/notices.ts) and a push, and the spot lights up. Those in line after the last game
+ * played right here are told first (and the line is cleared).
+ */
+export async function hostGame(game: string, stakeMint: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | (Fail & { busyId?: number })> {
+  const g = challengeGame(game);
+  if (!g?.engine || !isTableGame(g.id)) return { ok: false, error: "That game is coming soon." };
+  if (!REGIONS[region] || !Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, error: "Unknown place." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in to host a game." };
+  const perMint = perMintOf(region);
+  const stake = cleanStake(Number(stakeMint), perMint);
+  if (stake === null) return { ok: false, error: `Pick a stake from ₦${STAKE_MIN_NAIRA.toLocaleString("en-GB")} to ₦${STAKE_MAX_NAIRA.toLocaleString("en-GB")}.` };
+  const fee = Math.round((hostFeeNaira(g.id) / perMint) * 100) / 100;
+  const db = createAdminClient();
+  const args = { p_user: userId, p_region: region, p_game: g.id, p_stake: stake, p_x: Math.round(x), p_z: Math.round(z), p_seats: g.seats, p_fee: fee };
+  let res = await db.rpc("challenge_host", { ...args, p_secs: HOST_JOIN_SECS });
+  // Before part 122 is run: hosted as a challenge (its own fee rules), so Play works already.
+  if (res.error && /challenge_host/.test(res.error.message)) res = await db.rpc("challenge_open", { ...args, p_fee: Math.round((CHALLENGE_FEE_NAIRA / perMint) * 100) / 100, p_cooldown: CHALLENGE_COOLDOWN_SECS });
+  if (res.error) {
+    if (res.error.message.startsWith("busy")) {
+      const { data: busy } = await db.rpc("challenge_busy", { p_user: userId });
+      return { ok: false, error: "You're still in another game.", busyId: busy == null ? undefined : n(busy) };
+    }
+    return say(res.error.message);
+  }
+  const d = (res.data ?? {}) as { id?: number; fee?: number };
+  const id = n(d.id);
+  const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
+  const name = (me?.username as string | null) ?? "Someone";
+  const money = stake > 0 ? ` ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool.` : " Just for fun.";
+  // Those in line after the last game here hear first; then everyone nearby.
+  let line: string[] = [];
+  // The last game right here that's over (in the last half hour): its line hears first.
+  const { data: past } = await db
+    .from("challenges")
+    .select("id, x, z")
+    .eq("region", region)
+    .in("status", ["done", "cancelled"])
+    .gt("created_at", new Date(Date.now() - 30 * 60_000).toISOString())
+    .neq("id", id)
+    .order("id", { ascending: false })
+    .limit(20);
+  const follows = ((past ?? []) as { id: number; x: number; z: number }[]).find((c) => Math.hypot(n(c.x) - x, n(c.z) - z) <= 3)?.id;
+  if (follows) {
+    const q = await db.from("challenge_next").select("user_id").eq("challenge_id", Math.round(n(follows)));
+    line = ((q.data ?? []) as { user_id: string }[]).map((r) => String(r.user_id)).filter((u) => u !== userId);
+    if (line.length) {
+      await notifyMany(db, line, `game:${id}`, `Your turn: ${name} is hosting the next ${g.title} game.${money} Join now.`);
+      await db.from("challenge_next").delete().eq("challenge_id", Math.round(n(follows)));
+    }
+  }
+  const near = (await nearbyPeople(db, region, x, z, userId)).filter((u) => !line.includes(u));
+  await notifyMany(db, near, `game:${id}`, `${name} is hosting ${g.title} near you.${money} Join, watch, or get in line for the next one.`);
+  after(() => pushToMany([...line, ...near]));
+  return { ok: true, id, fee: n(d.fee) };
+}
+
+/** Get in line for the next game after this one (on false: out of line). The line's length. */
+export async function queueNext(id: number, on = true): Promise<{ ok: true; count: number } | Fail> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const { data, error } = await createAdminClient().rpc("challenge_queue", { p_user: userId, p_id: Math.round(n(id)), p_on: on });
+  if (error) return /challenge_queue|challenge_next/.test(error.message) ? { ok: false, error: "Getting in line is switched on soon (the game's owner has one update to run)." } : say(error.message);
+  return { ok: true, count: n(data) };
+}
+
 /** Challenge everyone nearby. stakeMint: what each player puts into the pool (any amount from ₦1,000 to ₦1m, in mint). */
 export async function openChallenge(game: string, stakeMint: number, x: number, z: number, region: string): Promise<{ ok: true; id: number; fee: number } | (Fail & { busyId?: number })> {
   const g = challengeGame(game);
@@ -128,29 +222,7 @@ export async function openChallenge(game: string, stakeMint: number, x: number, 
   // Everyone nearby hears about it (a notice, and a push).
   const { data: me } = await db.from("profiles").select("username").eq("id", userId).maybeSingle();
   const name = (me?.username as string | null) ?? "Someone";
-  // Who's within reach: from the kept positions (game-db/102), else the old way.
-  const box = await db
-    .from("lives")
-    .select("user_id")
-    .eq("region", region)
-    .neq("user_id", userId)
-    .gte("at_x", x - NEAR_TILES)
-    .lte("at_x", x + NEAR_TILES)
-    .gte("at_z", z - NEAR_TILES)
-    .lte("at_z", z + NEAR_TILES)
-    .limit(2000);
-  let near: string[];
-  if (!box.error) near = ((box.data ?? []) as { user_id: string }[]).map((l) => l.user_id);
-  else {
-    const { data: lives } = await db.from("lives").select("user_id, at_place, home_unit").eq("region", region).neq("user_id", userId).limit(1000);
-    near = ((lives ?? []) as { user_id: string; at_place: string | null; home_unit: string | null }[])
-      .filter((l) => {
-        const s = spotOf(l.at_place ?? l.home_unit);
-        return s && Math.hypot(s.x - x, s.z - z) <= NEAR_TILES;
-      })
-      .map((l) => l.user_id)
-      .slice(0, 60);
-  }
+  const near = await nearbyPeople(db, region, x, z, userId);
   const body = stake > 0 ? `${name} challenged everyone nearby to ${g.title}! ₦${tidy(stake * perMint).toLocaleString("en-GB")} each into the pool. Join within a minute.` : `${name} challenged everyone nearby to ${g.title}, just for fun! Join within a minute.`;
   await notifyMany(db, near, "challenge", body);
   // Phones are tapped after the host has their answer (the minute is already running).
@@ -246,6 +318,8 @@ export type ChallengeView = {
   prize: number | null;
   /** The one player it's for (game-db/110), or null: everyone nearby. */
   invited: ChallengePlayer | null;
+  /** In line for the next game here (game-db/122; empty before it's run). */
+  next: ChallengePlayer[];
 };
 
 async function views(db: ReturnType<typeof createAdminClient>, rows: Record<string, unknown>[]): Promise<ChallengeView[]> {
@@ -253,7 +327,9 @@ async function views(db: ReturnType<typeof createAdminClient>, rows: Record<stri
   const ids = rows.map((r) => n(r.id));
   const { data: ps } = await db.from("challenge_players").select("challenge_id, user_id, joined_at").in("challenge_id", ids).order("joined_at", { ascending: true });
   const players = (ps ?? []) as { challenge_id: number; user_id: string }[];
-  const people = [...new Set([...players.map((p) => p.user_id), ...rows.map((r) => (r.invited ? String(r.invited) : "")).filter(Boolean)])];
+  const queued = await db.from("challenge_next").select("challenge_id, user_id").in("challenge_id", ids).order("at", { ascending: true });
+  const line = (queued.error ? [] : (queued.data ?? [])) as { challenge_id: number; user_id: string }[];
+  const people = [...new Set([...players.map((p) => p.user_id), ...line.map((p) => p.user_id), ...rows.map((r) => (r.invited ? String(r.invited) : "")).filter(Boolean)])];
   const { data: profs } = people.length ? await db.from("profiles").select("id, username, avatar").in("id", people) : { data: [] };
   const byId = new Map(((profs ?? []) as { id: string; username: string | null; avatar: unknown }[]).map((p) => [p.id, p]));
   return rows.map((r) => {
@@ -278,6 +354,13 @@ async function views(db: ReturnType<typeof createAdminClient>, rows: Record<stri
       }),
       winner: r.winner_id ? String(r.winner_id) : null,
       prize: r.prize == null ? null : n(r.prize),
+      next: line
+        .filter((p) => n(p.challenge_id) === n(r.id))
+        .map((p) => {
+          const pr = byId.get(p.user_id);
+          const name = pr?.username ?? "Player";
+          return { id: p.user_id, name, avatar: cleanAvatar(pr?.avatar, name) };
+        }),
       invited: r.invited
         ? (() => {
             const pr = byId.get(String(r.invited));

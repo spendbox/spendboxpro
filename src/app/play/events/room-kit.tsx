@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { ChevronDown, CornerUpLeft, ImagePlus, LoaderCircle, LogOut, Send, Smile, SmilePlus, Trash2, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -380,10 +381,10 @@ export function RoomChat({
         </button>
       </form>
       {big && (
-        <button onClick={() => setBig(null)} className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-4" aria-label="Close the photo">
+        <OnTop as="button" onClick={() => setBig(null)} className="fixed inset-0 grid place-items-center bg-black/85 p-4" aria-label="Close the photo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={big} alt="" className="max-h-full max-w-full rounded-2xl object-contain" />
-        </button>
+        </OnTop>
       )}
     </div>
   );

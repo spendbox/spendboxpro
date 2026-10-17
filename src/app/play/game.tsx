@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "./on-top";
 import { PASSPORT_ON } from "@/lib/features";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -65,7 +66,7 @@ import { WORLD_EVENT_BY_KEY } from "@/lib/world-events";
 import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
-import { BookOpen, Church, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { Church, Crosshair, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Orbit, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -101,13 +102,14 @@ import type { CityDancer, CityEvent, CityFriendPin, CityGhost, CityInteract, Cit
 import type { PartyZone } from "./city/party-lights";
 import { isHere, whileHere } from "./activity";
 import { onLatest, setLatest, type Latest } from "./pulse";
+import { onMapNews } from "./map-news";
 import { FeedIconView, FeedRow, NotificationsPanel, SwipeRow, type FeedIcon, type FeedItem } from "./notifications";
 import { dismissNotices, readNotices } from "./notice-actions";
 import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
-import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, gameFeeMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -150,6 +152,8 @@ import * as serviceActions from "./service-actions";
 import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS, regionMap } from "@/lib/world";
+import { MINIGAMES_LISTED } from "./minigames/registry";
+import { BANK_ROBBERY } from "./activities/games";
 
 // Sheets opened from the map: loaded when first opened.
 const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
@@ -196,6 +200,8 @@ function CityLoading() {
 const Menu = dynamic(() => import("./menu").then((m) => m.Menu));
 const JobsSheet = dynamic(() => import("./jobs-sheet").then((m) => m.JobsSheet));
 const GamesSheet = dynamic(() => import("./minigames/games-sheet").then((m) => m.GamesSheet));
+const CopsRobbers = dynamic(() => import("./cops/cops").then((m) => m.CopsRobbers));
+const CopsCountdown = dynamic(() => import("./cops/countdown-ring").then((m) => m.CopsCountdown));
 const MinigameInvites = dynamic(() => import("./minigames/invites").then((m) => m.MinigameInvites));
 const CameraMode = dynamic(() => import("./phone/camera").then((m) => m.CameraMode));
 const PhoneSheet = dynamic(() => import("./phone/phone-sheet").then((m) => m.PhoneSheet));
@@ -547,6 +553,15 @@ export function Game({
   }, []);
   /** Someone's card (a face tapped on the map, or from your doorstep), and your doorstep. */
   const [personId, setPersonId] = useState<string | null>(null);
+  // A player's name or face tapped anywhere (./people/open-person): their card, over everything.
+  useEffect(() => {
+    const open = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id === "string" && id) setPersonId(id);
+    };
+    window.addEventListener("nt-person", open);
+    return () => window.removeEventListener("nt-person", open);
+  }, []);
   /** The camera was opened from a chat: the selfie goes to them. */
   const [selfieTo, setSelfieTo] = useState<{ target: ChatTarget; to: string } | null>(null);
   const [doorstepOpen, setDoorstepOpen] = useState(false);
@@ -580,6 +595,8 @@ export function Game({
   const [homeFloors, setHomeFloors] = useState<{ now: number; count: number } | null>(null);
   const [homeFloorsOpen, setHomeFloorsOpen] = useState(false);
   const [homeFloorTo, setHomeFloorTo] = useState<{ to: number; at: number } | null>(null);
+  /** Food paid for at your table: the waiter brings it (src/app/play/city/serve.ts). */
+  const [serve, setServe] = useState<{ ids: string[]; at: number } | null>(null);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -729,7 +746,7 @@ export function Game({
   const [dancing, setDancing] = useState<{ move: DanceMove; with: string | null } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
   /** The minigames: open (maybe straight into a game, or a challenge you accepted), or closed. */
-  const [gamesOpen, setGamesOpen] = useState<{ game?: string; invite?: Invite | null } | null>(null);
+  const [gamesOpen, setGamesOpen] = useState<{ game?: string; invite?: Invite | null; only?: boolean } | null>(null);
   /** Jobs: at this place (apply), null (My job), or closed (undefined). */
   const [jobsAt, setJobsAt] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
@@ -1021,9 +1038,11 @@ export function Game({
     [rooms.members, me.id],
   );
   // Where you are, for the minigames (the room's channel for challenges, who's here).
+  // The live room for games and challenges: on the real map there are no rounds, so round 0 (as chat).
+  const actRound = worldId ? 0 : (round?.id ?? null);
   const playCtx: PlayCtx = useMemo(
-    () => ({ roundId: round?.id ?? null, roomId: place || ride !== null ? (rooms.myRoomInfo?.id ?? null) : null, me: meP, members: rooms.members }),
-    [round?.id, place, ride, rooms.myRoomInfo?.id, meP, rooms.members],
+    () => ({ roundId: actRound, roomId: place || ride !== null ? (rooms.myRoomInfo?.id ?? null) : null, me: meP, members: rooms.members }),
+    [actRound, place, ride, rooms.myRoomInfo?.id, meP, rooms.members],
   );
   // Who you can add to a selfie: the people here, then your friends.
   const selfiePeople = useMemo(() => {
@@ -1460,7 +1479,7 @@ export function Game({
       quiet: n.kind === "duel_won" || n.kind === "duel_lost" || n.kind === "heist" || n.kind === "location",
       icon: ((
         { trap: "trap", trapped: "trap", swept: "drone", caught: "catch", shield: "shield", shielded: "shield", decoy: "decoy", streak: "flame", gift: "gift", spray: "gift", hug: "hug", handshake: "handshake", thanks: "hug", duel: "duel", duel_won: "duel", duel_lost: "duel", heist: "coin", market: "coin", dating: "hug" }) as Record<string, FeedIcon>
-      )[n.kind] ?? (n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
+      )[n.kind] ?? (n.kind.startsWith("game:") ? "duel" : n.kind === "doorstep" && /gift/i.test(n.body) ? "gift" : "info"),
       kind: n.kind,
       tile: n.tile,
       // The real map's notices can be read and cleared; the old game's are counted by time.
@@ -1632,6 +1651,8 @@ export function Game({
       }
     });
     const every = whileHere(look, 5 * 60_000);
+    // A game near you started, ended or was called off: its notice changes (src/lib/notices.ts).
+    const stopNews = onMapNews(worldId, "games", look);
     // A push arrived (the phone's service worker says so): look now. A tapped notification: go there.
     const onMessage = (e: MessageEvent) => {
       const t = (e.data as { type?: string; url?: string } | null)?.type;
@@ -1648,6 +1669,7 @@ export function Game({
       alive = false;
       stopLatest();
       every();
+      stopNews();
       navigator.serviceWorker?.removeEventListener("message", onMessage);
     };
     // chatWith is a plain function (new each render); the listener only needs the latest at the time.
@@ -2044,6 +2066,10 @@ export function Game({
   const [flightsOpen, setFlightsOpen] = useState(false);
   // Challenge (docs/CHALLENGES.md): the picker, and the challenges lit up on the map.
   const [fightOpen, setFightOpen] = useState(false);
+  /** Play (beside Events): host a game now, or join, watch or get in line for one near you. */
+  const [playOpen, setPlayOpen] = useState(false);
+  // Police & Thieves (docs/POLICE_THIEVES.md): its lobby, opened from the countdown beside Play.
+  const [copsOpen, setCopsOpen] = useState(false);
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
@@ -2064,21 +2090,21 @@ export function Game({
     const room = rooms.myRoom;
     const act = (kind: ActivityItem["kind"], label: string) => () => room && setActivity({ id: `${room}:${kind}:0`, kind, label, place: room });
     const board = (kind: RideKindName, label: string) => {
-      const r = rideList.find((x) => x.kind === kind);
+      // This place's own wheel or slides when there are (a park's slides: a different one each time).
+      const here = rideList.filter((x) => x.kind === kind && x.tile === enteredTile);
+      const r = here.length ? here[Math.floor(Math.random() * here.length)] : rideList.find((x) => x.kind === kind);
       return r ? { label, run: () => boardRide(r) } : null;
     };
     const sport = THEME_SPORT_GAME[theme];
     if (sport) return { label: "Watch the match", icon: Trophy, run: () => setSportsOpen(sport) };
-    if (inPlannedHome) {
-      const [hx, hz] = spiralXY(enteredTile);
-      return { label: "Sign the guest book", icon: BookOpen, run: () => worldLife.openGuestBook(`${worldId}:${hx},${hz}`) };
-    }
+    // In someone's home there's no main button (the guest book is gone).
+    if (inPlannedHome) return null;
     switch (theme) {
       case "restaurant":
       case "foodcourt":
       case "lounge":
       case "suite":
-        return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
+        return { label: theme === "suite" ? "Room service" : "Order food & drinks", icon: UtensilsCrossed, run: act("menu", "Order") };
       case "club":
         return { label: "Dance", icon: Music, run: () => startDancing() };
       case "shop":
@@ -2087,7 +2113,8 @@ export function Game({
       case "bank":
         return { label: "Banking", icon: LandmarkIcon, run: () => setMoneyOpen(true) };
       case "vault":
-        return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
+        // Robbing the bank is switched off for now (activities/games.ts BANK_ROBBERY).
+        return BANK_ROBBERY ? { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") } : null;
       case "church":
       case "mosque":
         return { label: "Pray", icon: Church, run: () => setPrayer(Date.now()) };
@@ -2104,18 +2131,23 @@ export function Game({
         if (b) return { ...b, icon: type === "port" || theme === "quay" ? Ship : TrainFront };
         break;
       }
+      case "ferris":
       case "funfair": {
-        const f = board("ferris", "Ride the Ferris wheel");
+        const f = board("ferris", `Ride the Ferris wheel · ${cash(rideFare("ferris", worldRegion?.prices.perMint))}`);
         return f && { ...f, icon: FerrisWheel };
       }
       case "waterpark": {
-        const w = board("slide", "Down the water slide");
+        const w = board("slide", `Down a water slide · ${cash(rideFare("slide", worldRegion?.prices.perMint))}`);
         return w && { ...w, icon: FerrisWheel };
       }
       case "gallery":
       case "rotunda":
         // A museum's galleries: its art is for sale (the masters at museum prices).
         return { label: "Buy art", icon: ShoppingBag, run: () => worldLife.openThings("shops", "museum") };
+      case "amusement":
+        // A park's amusement park: paintball on its field (Photo is in the bar too). Paintball is
+        // only at parks.
+        return { label: `Play paintball · ${cash(gameFeeMint("paintball", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "paintball", only: true }) };
       case "skybridge":
       case "clockroom":
       case "park":
@@ -2123,6 +2155,8 @@ export function Game({
       case "roofTerrace":
       case "poolDeck":
         return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
+      case "range":
+        return { label: `Shoot at the range · ${cash(gameFeeMint("shooting-range", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "shooting-range", only: true }) };
       case "market":
         return { label: "Shop at the stalls", icon: ShoppingBag, run: () => worldLife.openThings("shops", "market") };
     }
@@ -2372,6 +2406,7 @@ export function Game({
             onAtGate={setAtGate}
             onHomeFloors={setHomeFloors}
             homeFloorTo={homeFloorTo}
+            serve={serve}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
@@ -2530,7 +2565,7 @@ export function Game({
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
       {meP && rooms.myRoom && (
         <Safe name="Room activity">
-          <RoomActivityLayer roundId={round?.id ?? null} roomId={rooms.myRoom} me={meP} />
+          <RoomActivityLayer roundId={actRound} roomId={rooms.myRoom} me={meP} />
         </Safe>
       )}
 
@@ -2716,6 +2751,11 @@ export function Game({
               onClick={() => {
                 if (n.noteId) markRead([n.noteId]);
                 if (n.eventId) return openEvent(n.eventId);
+                // A hosted game near you: Play shows it (join, watch, or get in line).
+                if (worldId && n.kind?.startsWith("game:")) {
+                  setToasts([]);
+                  return setPlayOpen(true);
+                }
                 if (!guest && (n.icon === "hug" || n.icon === "handshake" || n.icon === "gift")) {
                   setToasts([]);
                   return openGifts();
@@ -2738,6 +2778,8 @@ export function Game({
           me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
           open={fightOpen}
           onClose={() => setFightOpen(false)}
+          playOpen={playOpen}
+          onPlayClose={() => setPlayOpen(false)}
           where={() => worldLife.centerRef.current?.() ?? null}
           onLights={setChallengeLights}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
@@ -2809,7 +2851,7 @@ export function Game({
       )}
       {prayer > 0 && <PrayerMoment key={prayer} onDone={() => setPrayer(0)} />}
       {leaveAsk && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
+        <OnTop className="fixed inset-0 grid place-items-center bg-black/40 p-4" onPointerDown={(e) => e.target === e.currentTarget && setLeaveAsk(null)} role="dialog" aria-label="Leave here?">
           <div className="w-full max-w-xs rounded-3xl bg-panel p-5 text-center shadow-2xl">
             <DoorOpen className="mx-auto size-8 text-gold-dark" aria-hidden />
             <h2 className="mt-2 font-display text-lg font-bold">Leave {ride !== null ? "this ride" : (rooms.myRoomInfo?.name ?? "this place")}?</h2>
@@ -2832,7 +2874,7 @@ export function Game({
               </button>
             </div>
           </div>
-        </div>
+        </OnTop>
       )}
       {alertsOpen && (
         <Sheet onClose={() => setAlertsOpen(false)} title="Notifications">
@@ -2939,7 +2981,7 @@ export function Game({
           level={guest ? undefined : me.level}
           onPhone={() => { setMenu(false); setPhone("home"); }}
           onMyJob={guest || worldId ? undefined : () => { setMenu(false); setJobsAt(null); }}
-          onGames={worldId ? undefined : () => { setMenu(false); setGamesOpen({}); }}
+          onGames={MINIGAMES_LISTED ? () => { setMenu(false); setGamesOpen({}); } : undefined}
           onChangePin={() => router.push("/welcome")}
           onSignOut={() => { setMenu(false); setConfirmSignOut(true); }}
         />
@@ -2951,7 +2993,7 @@ export function Game({
           ctx={playCtx}
           placeType={ride !== null ? ride.kind : (placeRoom?.type ?? null)}
           placeName={ride !== null || place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
-          open={gamesOpen.game ? { game: gamesOpen.game, invite: gamesOpen.invite } : null}
+          open={gamesOpen.game ? { game: gamesOpen.game, invite: gamesOpen.invite, only: gamesOpen.only } : null}
           onClose={() => setGamesOpen(null)}
         />
       )}
@@ -3302,9 +3344,18 @@ export function Game({
             roomId={activity.place}
             me={meP}
             members={rooms.members}
-            roundId={round?.id ?? null}
+            roundId={actRound}
             onClose={() => setActivity(null)}
             seating={rooms}
+            ordering={{
+              region: worldId && !guest ? worldId : null,
+              place: place?.building ?? null,
+              where: placeRoom?.type ?? null,
+              seated: !!rooms.mySeat,
+              perMint: worldRegion?.prices.perMint ?? 1_500,
+              onServed: (ids) => setServe((r) => ({ ids, at: (r?.at ?? 0) + 1 })),
+              onPaid: () => startTransition(() => router.refresh()),
+            }}
             onUseStairs={
               placeRoom && (placeRoom.levels?.length ?? 0) > 1
                 ? () => {
@@ -3733,7 +3784,7 @@ export function Game({
                 )}
               </button>
             )}
-            {!dockOpen && !isDancing && !worldId && (place || ride !== null) && (
+            {MINIGAMES_LISTED && !dockOpen && !isDancing && (place || ride !== null) && (
               <button onClick={() => setGamesOpen({})} className="glass pointer-events-auto flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold shadow sm:text-sm">
                 <Gamepad2 className="size-4 text-[#7048e8]" />
                 Games
@@ -3949,12 +4000,12 @@ export function Game({
         )}
       </div>
 
-      {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (gently
-          bouncing): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
+      {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (still,
+          no blinking): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
       {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <button
           onClick={() => setEventsOpen(true)}
-          className="events-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
+          className="pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
           aria-label="Events: what's on, and host your own"
           title="Events"
         >
@@ -3963,6 +4014,26 @@ export function Game({
           {tutorialGlow === "events" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
         </button>
       )}
+      {/* Play (docs/CHALLENGES.md "Play: host a game"): beside Events, host one of the full-screen
+          games right here, now, or join, watch or get in line for one near you. A dot while a
+          game is on near you. */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
+        <button
+          onClick={() => setPlayOpen(true)}
+          className="pointer-events-auto fixed right-[4.25rem] top-14 z-20 grid size-12 place-items-center rounded-full bg-gradient-to-br from-[#7048e8] to-[#e03131] text-white shadow-lg ring-1 ring-black/5 sm:right-[4.75rem] sm:top-16"
+          aria-label="Play: host a game now, or join one near you"
+          title="Play"
+        >
+          <Gamepad2 className="size-6" />
+          {challengeLights.length > 0 && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-[#ffd43b] ring-2 ring-white" />}
+        </button>
+      )}
+      {/* Police & Thieves: beside Play, the countdown to the next game (2am, 10am, 6pm Lagos time),
+          a ring that fills as it comes closer; LIVE while one is on. Opens its lobby. */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
+        <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[8.25rem] top-14 z-20 sm:right-[9.25rem] sm:top-16" />
+      )}
+      {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} onClose={() => setCopsOpen(false)} />}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
           once they're on). On the real map it's in the column down the left instead. */}
       {!me.guest && !pushOn && !camera && !worldId && (
@@ -4492,12 +4563,12 @@ function PrayerMoment({ onDone }: { onDone: () => void }) {
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div className="pointer-events-none fixed inset-0 z-[65] grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
+    <OnTop className="pointer-events-none fixed inset-0 grid place-items-center bg-black/55 text-center text-white" style={{ animation: "toast-in .6s ease-out" }}>
       <div>
         <p className="font-display text-2xl font-bold">A quiet moment</p>
         <p className="mt-1 text-sm text-white/80">You bow your head and pray. You feel calmer.</p>
       </div>
-    </div>
+    </OnTop>
   );
 }
 

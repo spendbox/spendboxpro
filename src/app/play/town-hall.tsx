@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "./on-top";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CornerUpLeft, ImagePlus, Landmark, Send, Smile, SmilePlus, Trash2, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -411,10 +412,10 @@ export function TownHall({
       </form>
       {error && <p className="mt-1.5 text-xs font-semibold text-hit">{error}</p>}
       {big && (
-        <button onClick={() => setBig(null)} className="fixed inset-0 z-[95] grid place-items-center bg-black/85 p-4" aria-label="Close the photo">
+        <OnTop as="button" onClick={() => setBig(null)} className="fixed inset-0 grid place-items-center bg-black/85 p-4" aria-label="Close the photo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={big} alt="A photo in the Town Hall" className="max-h-full max-w-full rounded-xl" />
-        </button>
+        </OnTop>
       )}
     </Sheet>
   );

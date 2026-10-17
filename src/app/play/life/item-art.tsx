@@ -1,11 +1,13 @@
 // Pictures of the things in the shop (src/lib/world/items.ts), drawn to look like the real thing:
 // the shop list shows them small, and the "It's yours!" pop-up big. Every kind in the shop has its
-// own drawing (./art/: watches, things you wear, things for home, cars). A kind that isn't drawn
+// own drawing (./art/: watches, things you wear, things for home, the market and museum, cars). A kind that isn't drawn
 // (an invention a player made) shows its category's drawing on the category's coloured tile.
 
 import type { ItemCategory } from "@/lib/world/items";
 import { ART as CARS } from "./art/cars";
 import { ART as HOME } from "./art/home";
+import { ART as GUNS } from "./art/guns";
+import { ART as MARKET } from "./art/market";
 import { ART as MORE } from "./art/more";
 import { WATCHES, Watch } from "./art/watches";
 import { ART as WEAR } from "./art/wear";
@@ -276,6 +278,8 @@ const DRAWN: Partial<
   ...WEAR,
   ...HOME,
   ...MORE,
+  ...MARKET,
+  ...GUNS,
   ...CARS,
 };
 

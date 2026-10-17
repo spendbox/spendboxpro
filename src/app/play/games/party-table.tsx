@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Crown, Eye, LoaderCircle, MessageCircle, Mic, MicOff, PhoneOff, Play, RotateCcw, Send, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -343,7 +344,7 @@ export function PartyShell({
   const prize = view.pool * WINNER_SHARE;
 
   return (
-    <div className="fixed inset-0 z-[80] flex h-[100dvh] select-none flex-col overflow-hidden text-white" style={{ background: theme.background }} role="dialog" aria-label={title}>
+    <OnTop className="fixed inset-0 flex h-[100dvh] select-none flex-col overflow-hidden text-white" style={{ background: theme.background }} role="dialog" aria-label={title}>
       {/* Top bar. */}
       <header className="relative z-20 flex items-center gap-2 px-3 pb-1 pt-[max(0.6rem,env(safe-area-inset-top))]">
         <button onClick={() => (over || done || watching ? onClose() : setLeaving(true))} className="grid size-10 shrink-0 place-items-center rounded-full bg-black/35 ring-1 ring-white/15 backdrop-blur" aria-label={watching ? "Stop watching" : "Leave"}>
@@ -452,7 +453,7 @@ export function PartyShell({
           </div>
         </div>
       )}
-    </div>
+    </OnTop>
   );
 }
 

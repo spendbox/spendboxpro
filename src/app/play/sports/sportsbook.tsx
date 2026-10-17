@@ -882,14 +882,14 @@ function BetSlip({
         })}
       </div>
 
-      {/* How much? */}
-      <div className="grid grid-cols-5 gap-1.5">
+      {/* How much? Two a row on a phone (room for big amounts), all in a row on a bigger screen. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {CHIPS.map((c) => (
           <button
             key={c}
             onClick={() => onAmount(String(c))}
             disabled={closed || busy}
-            className={cn("min-h-10 rounded-xl text-sm font-bold disabled:opacity-50", n === c ? "bg-ink text-white" : "bg-panel text-muted")}
+            className={cn("min-h-12 rounded-2xl px-3 text-base font-bold tabular-nums disabled:opacity-50", n === c ? "bg-ink text-white" : "bg-panel text-muted")}
           >
             {cash(c)}
           </button>
@@ -901,7 +901,7 @@ function BetSlip({
           disabled={closed || busy}
           placeholder="Other"
           aria-label="How much to bet"
-          className="min-h-10 w-full min-w-0 rounded-xl border border-line bg-panel px-0.5 text-center text-sm font-bold outline-none placeholder:text-[13px] placeholder:font-semibold focus:border-ink"
+          className="col-span-2 min-h-12 w-full min-w-0 rounded-2xl border border-line bg-panel px-3 text-center text-base font-bold outline-none placeholder:text-sm placeholder:font-semibold focus:border-ink sm:col-span-1"
         />
       </div>
 

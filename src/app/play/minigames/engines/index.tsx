@@ -12,6 +12,7 @@ const load = (f: () => Promise<{ default: ComponentType<EngineProps> }>) =>
 export const ENGINES: Record<string, ComponentType<EngineProps>> = {
   meter: load(() => import("./meter")),
   targets: load(() => import("./targets")),
+  range3d: load(() => import("./range3d")),
   race: load(() => import("./race")),
   lanes: load(() => import("./lanes")),
   crossing: load(() => import("./crossing")),

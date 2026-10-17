@@ -1,6 +1,6 @@
 # 100 minigames for Newtown
 
-**All 100 are built** (`src/app/play/minigames/`). This page started as the wish list; the tables
+**All 100 are built, and paintball (101)** (`src/app/play/minigames/`). This page started as the wish list; the tables
 below are the original ideas, and `registry.ts` is the final word on how each one plays.
 
 How they're used:
@@ -11,8 +11,14 @@ How they're used:
   challenge to someone in the same place (both play the same level on their own phones; best
   score wins). Board and card games: against the computer, pass and play, or online against
   someone here (moves are sent between phones).
-- **Rewards** (`game-db/036_minigames.sql`): bronze, silver and gold scores pay ₥2, ₥4 and ₥6, for
-  up to 10 games a day, once every 45 seconds per game. Leaderboards for every game.
+- **Cost, never prizes** (`src/lib/fees.ts`, `game-db/121_games_cost.sql`): every go at a game
+  costs a small fee (₦1,000; the shooting range and paintball ₦5,000; chess and draughts ₦2,000;
+  poker and blackjack ₦3,000), from Fun money, then savings, then essentials. Games never pay
+  money out; good scores go on the leaderboards. Heist steps and job shifts are free (a good shift
+  still earns a tip). The little games tapped inside places (darts, archery, pool...) cost too.
+- **Full screen:** the shooting range, chess and draughts (a 3D board) and paintball fill the
+  screen. At a shooting range its button opens only the shooting game.
+- **Paintball only at parks** (parks, the big parks and fun parks; docs/PAINTBALL_PLAN.md).
 - **Heists:** the bank robbery has a "job" step: two stealth games (three for the big job, ending
   with the getaway drive), picked from the heist category. Fail one and the alarm goes off.
   `HeistChain` (heist-chain.tsx) chains any games for any future heist.

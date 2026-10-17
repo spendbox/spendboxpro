@@ -32,8 +32,9 @@ export function GamesSheet({
   placeType?: string | null;
   placeName?: string | null;
   onClose: () => void;
-  /** Open straight into a game (and a challenge you accepted). */
-  open?: { game: string; invite?: Invite | null } | null;
+  /** Open straight into a game (and a challenge you accepted). only: just that game (the
+   * shooting range's own button): leaving it closes the sheet, never the list of all games. */
+  open?: { game: string; invite?: Invite | null; only?: boolean } | null;
 }) {
   const [cat, setCat] = useState<Category | "all" | "here">(placeType ? "here" : "all");
   const [q, setQ] = useState("");
@@ -54,10 +55,12 @@ export function GamesSheet({
       {!ctx.roomId && <MinigameInvites ctx={ctx} onAccept={(def, invite) => setPlaying({ def, invite, at: Date.now() })} />}
       {playing ? (
         <div className="space-y-2">
-          <button onClick={() => setPlaying(null)} className="flex items-center gap-1 text-sm font-semibold text-muted">
-            <ChevronLeft className="size-4" /> All games
-          </button>
-          <MiniGamePlayer key={`${playing.def.id}:${playing.at}`} def={playing.def} ctx={ctx} invite={playing.invite} onClose={() => setPlaying(null)} />
+          {!open?.only && (
+            <button onClick={() => setPlaying(null)} className="flex items-center gap-1 text-sm font-semibold text-muted">
+              <ChevronLeft className="size-4" /> All games
+            </button>
+          )}
+          <MiniGamePlayer key={`${playing.def.id}:${playing.at}`} def={playing.def} ctx={ctx} invite={playing.invite} onClose={() => (open?.only ? onClose() : setPlaying(null))} />
         </div>
       ) : (
         <div className="space-y-3">
@@ -115,3 +118,4 @@ export function GamesSheet({
     </Sheet>
   );
 }
+

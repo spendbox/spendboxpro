@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Crown } from "lucide-react";
-import { cn } from "@/lib/cn";
 import type { TurnRules, TurnViewProps } from "../types";
 import { rnd } from "./common";
+import { FullBoard } from "./full-board";
 
 // Draughts (English checkers) on an 8 × 8 board. Men move one square diagonally forward; you
 // must jump when you can, and keep jumping in the same turn while you can. A man that reaches
 // the far side is crowned a king (moves and jumps backwards too). Take all their pieces, or leave
 // them no move, to win. 40 moves each without a capture is a draw.
-// Seat 0 plays from the bottom (red), seat 1 from the top (black).
+// Seat 0 plays from the bottom (red), seat 1 from the top (black). Played full screen on a 3D
+// board (./full-board).
 
 type Piece = { side: number; king: boolean } | null;
 type S = { b: Piece[]; turn: number; n: number; seed: number; quiet: number; last: number[] };
@@ -146,43 +146,56 @@ export const rules: TurnRules<S, M> = {
   },
 };
 
-export function View({ s, seat, canMove, onMove }: TurnViewProps<S, M>) {
+export function View({ s, seat, canMove, onMove, names, kinds, onQuit }: TurnViewProps<S, M>) {
   const [from, setFrom] = useState<number | null>(null);
   const ms = canMove ? allMoves(s) : [];
-  const flip = seat === 1;
   const fromHere = from === null ? [] : ms.filter((m) => m[0] === from);
   const targets = new Map(fromHere.map((m) => [m[m.length - 1], m]));
   const movable = new Set(ms.map((m) => m[0]));
+  const over = rules.turn(s) < 0;
+  const won = over ? (rules.winners(s) ?? []) : [];
+  const left = (sd: number) => s.b.filter((p) => p && p.side === sd).length;
+  const sideOf = (i: number) => ({
+    name: names[i] ?? (i ? "Black" : "Red"),
+    colour: i ? "#1b1716" : "#b3261e",
+    ring: i ? "#adb5bd" : "#ff8787",
+    label: i ? "Black" : "Red",
+    taken: 12 - left(1 - i),
+  });
+  const mustJump = ms.some((m) => Math.abs(Math.floor(m[1] / 8) - Math.floor(m[0] / 8)) === 2);
+  const waiting = kinds?.[s.turn] === "remote" ? `Waiting for ${names[s.turn]}…` : `${names[s.turn]} is thinking…`;
+  const status = canMove ? (from === null ? (mustJump ? "You must jump!" : "Your move") : "Now tap where it goes") : waiting;
+  const result = (() => {
+    if (!over) return null;
+    if (won.length !== 1) return { title: "A draw", sub: "Forty moves each with nothing taken.", won: false };
+    const mine = won[0] === seat || kinds?.[won[0]] === "local";
+    return { title: mine && kinds?.[won[0]] !== "local" ? "You won!" : `${names[won[0]]} wins`, sub: left(1 - won[0]) ? "No moves left." : "Every piece taken.", won: mine };
+  })();
   return (
-    <div className="mx-auto grid aspect-square w-full max-w-sm grid-cols-8 overflow-hidden rounded-2xl border-4 border-[#5c3d22]">
-      {Array.from({ length: 64 }, (_, k) => {
-        const i = flip ? 63 - k : k;
-        const [r, c] = rc(i);
-        const dark = (r + c) % 2 === 1;
-        const p = s.b[i];
+    <FullBoard
+      style="draughts"
+      board={s.b.map((p) => (p ? `${p.side}${p.king ? "K" : "M"}` : null))}
+      last={s.last}
+      flip={seat === 1}
+      pickable={movable}
+      selected={from}
+      targets={new Set(targets.keys())}
+      danger={null}
+      onSquare={(i) => {
         const target = targets.get(i);
-        return (
-          <button
-            key={i}
-            onClick={() => {
-              if (target) {
-                setFrom(null);
-                onMove(target);
-              } else if (movable.has(i)) setFrom(i);
-              else setFrom(null);
-            }}
-            className={cn("relative grid place-items-center", dark ? "bg-[#8d5524]" : "bg-[#f1d9b5]", s.last.includes(i) && dark && "bg-[#a0663a]", from === i && "bg-[#e8590c]")}
-            aria-label={p ? `${p.side === 0 ? "Red" : "Black"} ${p.king ? "king" : "piece"}` : "Square"}
-          >
-            {p && (
-              <span className={cn("grid size-4/5 place-items-center rounded-full border-4 shadow", p.side === 0 ? "border-[#a51111] bg-[#e03131]" : "border-black bg-[#343a40]", movable.has(i) && !from && "ring-2 ring-gold")}>
-                {p.king && <Crown className="size-4 text-gold" />}
-              </span>
-            )}
-            {target && <span className="absolute size-3 rounded-full bg-gold" />}
-          </button>
-        );
-      })}
-    </div>
+        if (target) {
+          setFrom(null);
+          onMove(target);
+        } else if (movable.has(i)) setFrom(i === from ? null : i);
+        else setFrom(null);
+      }}
+      me={sideOf(seat)}
+      them={sideOf(1 - seat)}
+      myTurn={canMove}
+      theirTurn={!canMove && !over}
+      status={status}
+      over={result}
+      onQuit={onQuit}
+    />
   );
 }

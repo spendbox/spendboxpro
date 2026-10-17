@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "./on-top";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, X } from "lucide-react";
@@ -79,7 +80,7 @@ export function SignInOverlay({
       : "Just your email to start.";
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-ink/25 p-4 backdrop-blur-[6px]" role="presentation">
+    <OnTop className="fixed inset-0 grid place-items-center bg-ink/25 p-4 backdrop-blur-[6px]" role="presentation">
       <section
         role="dialog"
         aria-modal="true"
@@ -131,6 +132,6 @@ export function SignInOverlay({
           )}
         </div>
       </section>
-    </div>
+    </OnTop>
   );
 }

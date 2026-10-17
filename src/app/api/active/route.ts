@@ -12,10 +12,13 @@ async function cityLatest(db: Db, region: string) {
   if (hit && Date.now() - hit.at < 20_000) return hit;
   const [town, events] = await Promise.all([
     db.from("chat_messages").select("id").eq("room", `town:${region}`).order("id", { ascending: false }).limit(1).maybeSingle(),
-    db.from("hosted_events").select("id").eq("region", region).eq("status", "on").gt("ends_at", new Date().toISOString()).order("id", { ascending: false }).limit(200),
+    db.from("hosted_events").select("id, starts_at").eq("region", region).eq("status", "on").gt("ends_at", new Date().toISOString()).order("id", { ascending: false }).limit(200),
   ]);
-  const ids = ((events.data ?? []) as { id: number }[]).map((e) => Number(e.id));
-  const out = { at: Date.now(), town: Number(town.data?.id ?? 0), events: `${ids.length}:${ids[0] ?? 0}:${ids.reduce((t, k) => (t + k) % 1_000_003, 0)}` };
+  // The ids and start times: a new one, one called off and one moved to another time all change it.
+  const rows = (events.data ?? []) as { id: number; starts_at: string | null }[];
+  const ids = rows.map((e) => Number(e.id));
+  const when = rows.reduce((t, e) => (t + Math.floor((Date.parse(String(e.starts_at)) || 0) / 60_000) * (Number(e.id) % 97 + 1)) % 1_000_003, 0);
+  const out = { at: Date.now(), town: Number(town.data?.id ?? 0), events: `${ids.length}:${ids[0] ?? 0}:${ids.reduce((t, k) => (t + k) % 1_000_003, 0)}:${when}` };
   cityNews.set(region, out);
   return out;
 }

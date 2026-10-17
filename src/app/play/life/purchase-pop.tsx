@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { useEffect, useState } from "react";
 import { cash } from "@/lib/world/value";
 import { LUXURY_FROM, type ItemKind } from "@/lib/world/items";
@@ -46,8 +47,8 @@ export function PurchasePop({
     return () => clearTimeout(t);
   }, [big, onClose]);
   return (
-    <div
-      className="fixed inset-0 z-[95] grid place-items-center bg-ink/70 p-6 backdrop-blur-sm"
+    <OnTop
+      className="fixed inset-0 grid place-items-center bg-ink/70 p-6 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
       aria-label={`You bought ${kind.name}`}
@@ -121,6 +122,6 @@ export function PurchasePop({
           Nice!
         </button>
       </div>
-    </div>
+    </OnTop>
   );
 }

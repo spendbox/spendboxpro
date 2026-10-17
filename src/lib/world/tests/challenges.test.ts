@@ -20,9 +20,9 @@ import {
   stakeBounds,
 } from "../challenges.ts";
 
-test("Whot, Ludo, Truth or Dare and Impostor can be played now; Jenga and Police and Thief are coming soon", () => {
+test("Whot, Ludo, draughts, chess, paintball, Truth or Dare and Impostor can be played now; Jenga and Police and Thief are coming soon", () => {
   const ready = CHALLENGE_GAMES.filter((g) => g.engine).map((g) => g.id);
-  assert.deepEqual(ready, ["whot", "ludo", "truth_dare", "impostor"]);
+  assert.deepEqual(ready, ["whot", "ludo", "draughts", "chess", "truth_dare", "impostor", "paintball"]);
   assert.ok(CHALLENGE_GAMES.some((g) => g.id === "jenga" && !g.engine));
   assert.ok(CHALLENGE_GAMES.some((g) => g.id === "police_thief" && !g.engine));
   for (const g of CHALLENGE_GAMES) {

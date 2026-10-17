@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/cn";
 import type { TurnRules, TurnViewProps } from "../types";
 import { rnd } from "./common";
+import { FullBoard } from "./full-board";
 
 // Chess with the full rules: castling, en passant, pawns that reach the end become queens,
 // check, checkmate and stalemate (and a draw after 100 moves with no capture or pawn move).
-// Seat 0 plays white (at the bottom). The bot looks three moves ahead.
+// Seat 0 plays white (at the bottom). The bot looks three moves ahead. Played full screen on a
+// 3D board (./full-board).
 
 type Side = "w" | "b";
 type Piece = `${Side}${"P" | "N" | "B" | "R" | "Q" | "K"}`;
@@ -18,7 +19,6 @@ const side = (s: S): Side => (s.turn === 0 ? "w" : "b");
 const rc = (i: number) => [i >> 3, i & 7];
 const on = (r: number, c: number) => r >= 0 && c >= 0 && r < 8 && c < 8;
 const VAL: Record<string, number> = { P: 100, N: 300, B: 320, R: 500, Q: 900, K: 0 };
-const GLYPH: Record<string, string> = { wK: "♔", wQ: "♕", wR: "♖", wB: "♗", wN: "♘", wP: "♙", bK: "♚", bQ: "♛", bR: "♜", bB: "♝", bN: "♞", bP: "♟" };
 
 function attacked(b: (Piece | null)[], i: number, by: Side) {
   const [r, c] = rc(i);
@@ -224,48 +224,55 @@ export const rules: TurnRules<S, M> = {
   },
 };
 
-export function View({ s, seat, canMove, onMove }: TurnViewProps<S, M>) {
+export function View({ s, seat, canMove, onMove, names, kinds, onQuit }: TurnViewProps<S, M>) {
   const [from, setFrom] = useState<number | null>(null);
   const ms = canMove ? legal(s) : [];
-  const flip = seat === 1;
   const targets = new Set(ms.filter((m) => m.f === from).map((m) => m.t));
-  const mine = new Set(ms.map((m) => m.f));
+  const movable = new Set(ms.map((m) => m.f));
   const check = inCheck(s.b, side(s));
+  const over = rules.turn(s) < 0;
+  const won = over ? (rules.winners(s) ?? []) : [];
+  const them = 1 - seat;
+  const lost = (sd: Side) => 16 - s.b.filter((p) => p && p[0] === sd).length;
+  const sideOf = (i: number) => ({
+    name: names[i] ?? (i ? "Black" : "White"),
+    colour: i ? "#1b1716" : "#f2e8d5",
+    ring: i ? "#adb5bd" : "#ffe8a3",
+    label: i ? "Black" : "White",
+    taken: lost(i ? "w" : "b"),
+  });
+  const waiting = kinds?.[s.turn] === "remote" ? `Waiting for ${names[s.turn]}…` : `${names[s.turn]} is thinking…`;
+  const status = canMove ? (check ? "Check!" : from === null ? "Your move" : "Now tap where it goes") : check ? "Check!" : waiting;
+  const result = (() => {
+    if (!over) return null;
+    if (won.length !== 1) return { title: "A draw", sub: s.quiet >= 100 ? "Fifty moves each with no capture or pawn move." : "Stalemate: no legal move, but no check.", won: false };
+    const mine = won[0] === seat || kinds?.[won[0]] === "local";
+    return { title: mine && kinds?.[won[0]] !== "local" ? "You won!" : `${names[won[0]]} wins`, sub: "Checkmate.", won: mine };
+  })();
   return (
-    <div className="space-y-1">
-      <div className="mx-auto grid aspect-square w-full max-w-sm grid-cols-8 overflow-hidden rounded-2xl border-4 border-[#495057]">
-        {Array.from({ length: 64 }, (_, k) => {
-          const i = flip ? 63 - k : k;
-          const [r, c] = rc(i);
-          const p = s.b[i];
-          const light = (r + c) % 2 === 0;
-          const isTarget = targets.has(i);
-          return (
-            <button
-              key={i}
-              onClick={() => {
-                if (from !== null && isTarget) {
-                  onMove({ f: from, t: i });
-                  setFrom(null);
-                } else if (mine.has(i)) setFrom(i);
-                else setFrom(null);
-              }}
-              className={cn(
-                "relative grid place-items-center text-[min(9vw,2.4rem)] leading-none",
-                light ? "bg-[#f0d9b5]" : "bg-[#b58863]",
-                s.last.includes(i) && "bg-[#cdd26a]",
-                from === i && "bg-[#f7ec74]",
-                check && p === `${side(s)}K` && "bg-[#ff8787]",
-              )}
-              aria-label={p ?? "Empty square"}
-            >
-              {p && <span className={cn(p[0] === "w" ? "text-white [text-shadow:0_0_2px_#000,0_0_1px_#000]" : "text-black")}>{GLYPH[p]}</span>}
-              {isTarget && <span className={cn("absolute rounded-full", p ? "inset-0.5 border-4 border-black/30" : "size-3 bg-black/30")} />}
-            </button>
-          );
-        })}
-      </div>
-      {check && <p className="text-center text-sm font-bold text-hit">Check!</p>}
-    </div>
+    <FullBoard
+      style="chess"
+      board={s.b}
+      last={s.last}
+      flip={seat === 1}
+      pickable={movable}
+      selected={from}
+      targets={targets}
+      danger={check ? s.b.indexOf(`${side(s)}K`) : null}
+      onSquare={(i) => {
+        if (from !== null && targets.has(i)) {
+          onMove({ f: from, t: i });
+          setFrom(null);
+        } else if (movable.has(i)) setFrom(i === from ? null : i);
+        else setFrom(null);
+      }}
+      me={sideOf(seat)}
+      them={sideOf(them)}
+      myTurn={canMove}
+      theirTurn={!canMove && !over}
+      status={status}
+      over={result}
+      onQuit={onQuit}
+    />
   );
 }

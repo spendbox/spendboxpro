@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonLink } from "./people/open-person";
 import { useEffect, useMemo, useState } from "react";
 import { Check, LoaderCircle, MapPin, MessageCircle, Search, UserCheck, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -168,9 +169,9 @@ export function FriendsSheet({
           <ul className="space-y-1.5">
             {lists.incoming.map((p) => (
               <li key={p.id} className="flex items-center gap-2.5 rounded-2xl bg-[#fff4e6] p-2">
-                <AvatarFace avatar={p.avatar} size={40} className="shrink-0 rounded-full" />
+                <PersonLink id={p.id} className="shrink-0 hover:no-underline"><AvatarFace avatar={p.avatar} size={40} className="shrink-0 rounded-full" /></PersonLink>
                 <span className="min-w-0 flex-1">
-                  <b className="block truncate text-sm">{p.name}</b>
+                  <PersonLink id={p.id} className="block w-full"><b className="block truncate text-sm">{p.name}</b></PersonLink>
                   <span className="text-xs text-muted">Level {p.level}</span>
                 </span>
                 <button
@@ -210,11 +211,11 @@ export function FriendsSheet({
                 <li key={f.id} className="rounded-2xl bg-panel-2/70 p-2">
                   <div className="flex items-center gap-2.5">
                     <span className="relative shrink-0">
-                      <AvatarFace avatar={f.avatar} size={40} className="rounded-full" />
+                      <PersonLink id={f.id} className="shrink-0 hover:no-underline"><AvatarFace avatar={f.avatar} size={40} className="rounded-full" /></PersonLink>
                       {(at || side) && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-[#40c057] ring-2 ring-white" aria-label="in this town" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <b className="block truncate text-sm">{f.name}</b>
+                      <PersonLink id={f.id} className="block w-full"><b className="block truncate text-sm">{f.name}</b></PersonLink>
                       <span className={cn("block truncate text-xs", at || side ? "text-[#2b8a3e]" : "text-muted")}>
                         {here
                           ? "Here with you"
@@ -286,9 +287,9 @@ export function FriendsSheet({
             ) : (
               searchList.map((p) => (
                 <li key={p.id} className="flex items-center gap-2.5 rounded-2xl px-1 py-1">
-                  <AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" />
+                  <PersonLink id={p.id} className="shrink-0 hover:no-underline"><AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" /></PersonLink>
                   <span className="min-w-0 flex-1">
-                    <b className="block truncate text-sm">{p.name}</b>
+                    <PersonLink id={p.id} className="block w-full"><b className="block truncate text-sm">{p.name}</b></PersonLink>
                     <span className="text-xs text-muted">Level {p.level}</span>
                   </span>
                   {addButton(p)}
@@ -303,8 +304,8 @@ export function FriendsSheet({
             <ul className="space-y-1">
               {others.map((p) => (
                 <li key={p.id} className="flex items-center gap-2.5 rounded-2xl px-1 py-1">
-                  <AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" />
-                  <b className="min-w-0 flex-1 truncate text-sm">{p.name}</b>
+                  <PersonLink id={p.id} className="shrink-0 hover:no-underline"><AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" /></PersonLink>
+                  <PersonLink id={p.id} className="flex-1"><b className="block truncate text-sm">{p.name}</b></PersonLink>
                   {addButton(p)}
                 </li>
               ))}
@@ -319,9 +320,9 @@ export function FriendsSheet({
           <ul className="space-y-1">
             {lists.outgoing.map((p) => (
               <li key={p.id} className="flex items-center gap-2.5 rounded-2xl px-1 py-1">
-                <AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" />
+                <PersonLink id={p.id} className="shrink-0 hover:no-underline"><AvatarFace avatar={p.avatar} size={34} className="shrink-0 rounded-full" /></PersonLink>
                 <span className="min-w-0 flex-1">
-                  <b className="block truncate text-sm">{p.name}</b>
+                  <PersonLink id={p.id} className="block w-full"><b className="block truncate text-sm">{p.name}</b></PersonLink>
                   <span className="text-xs text-muted">Waiting for a yes</span>
                 </span>
                 <button

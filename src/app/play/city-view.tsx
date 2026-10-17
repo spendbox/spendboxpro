@@ -49,6 +49,7 @@ import { createBuildingSite, createSites } from "./city/construction";
 import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
 import { createGroundsWalker, createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
+import { createAmusementPark } from "./city/amusement";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches, rngFrom } from "./city/kit";
 import { clubBeat, type DanceMove } from "./city/dance-moves";
@@ -66,6 +67,10 @@ import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
 import { marketParts } from "./city/market-kit";
 import { museumParts } from "./city/museum-kit";
+import { plazaDesign, plazaParts } from "./city/plaza-kit";
+import { FERRIS, ferrisWheel } from "./city/ferris";
+import { createService } from "./city/serve";
+import { MENU_BY_ID } from "@/lib/world/menu";
 import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
@@ -216,7 +221,7 @@ export type RideTarget = { kind: RideKind; index: number };
  * A ride that exists this round (see onRides). Its chat room id is `v:<kind>:<index>`, except
  * balloons, which keep `balloon:<k>`.
  */
-export type CityRide = { kind: RideKind; index: number; name: string; capacity: number; /** Mint to board (trains), each time. */ fare?: number };
+export type CityRide = { kind: RideKind; index: number; name: string; capacity: number; /** Mint to board (trains), each time. */ fare?: number; /** The tile it stands on (a Ferris wheel, a water park's slide). */ tile?: number };
 /** Which way to go at a junction when you're driving a car. */
 export type TurnDir = "left" | "right" | "straight";
 
@@ -406,6 +411,8 @@ type Props = {
   onHomeFloors?: (floors: { now: number; count: number } | null) => void;
   /** Change it to go on inside from a landmark's entrance. */
   gateIn?: number;
+  /** Food you ordered at your table (menu ids): a waiter brings it; `at` makes each order new. */
+  serve?: { ids: string[]; at: number } | null;
   /** Go to this floor of the planned home you're in (its Floor button); `at` makes each ask new. */
   homeFloorTo?: { to: number; at: number } | null;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
@@ -423,9 +430,6 @@ const WINDOW = 40;
  * beyond it, plain blocks and a painted map (./city/far-city) keep a strict drawing budget.
  */
 const DETAIL = 18;
-/** A winding street's asphalt (tile widths), and the dusty verges either side of it. */
-const ROAD_W = 0.6;
-const VERGE = 0xbcb3a0;
 /** How far from the middle of the drawn area (tiles) shared tiles get their little houses (src/lib/city/plots). */
 const PLOTS_NEAR = 12;
 const SKY = 0xd7ebf7;
@@ -671,21 +675,7 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       add("crown", { x: x - cx * 0.7, y: 0.17, z: z - cz * 0.7, sx: 0.27, sy: 0.34, sz: 0.27, ry: t.r[0] * 6, color: plan.palette.leaves[0] });
       return;
     }
-    // (Where an expressway meets it, drawn full width, the junction stays full width too.)
-    const bigRoad = (dx: number, dz: number) => {
-      const k = plan.region?.roadAt(x + dx, z + dz)?.kind;
-      return k === "motorway" || k === "trunk";
-    };
-    const junction = !t.roundabout && !t.express && !(m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8) && ![[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dx, dz]) => bigRoad(dx, dz));
-    if (junction) {
-      // A junction as wide as the streets meeting at it: verges on the corners, asphalt in the
-      // middle and out to each street.
-      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
-      add("ground", { x, y: 0, z, sx: ROAD_W, sy: 0.06, sz: ROAD_W, ry: 0, color: ASPHALT });
-      for (const [bit, dx, dz] of [[1, 0, -0.25], [2, 0.25, 0], [4, 0, 0.25], [8, -0.25, 0]] as const) {
-        if (m & bit) add("ground", { x: x + dx, y: 0, z: z + dz, sx: dx ? 0.5 : ROAD_W, sy: 0.06, sz: dz ? 0.5 : ROAD_W, ry: 0, color: ASPHALT });
-      }
-    } else add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
+    add("ground", { x, y: 0, z, sx: 1, sy: 0.06, sz: 1, ry: 0, color: ASPHALT });
     if (t.roundabout) {
       // Roundabout: a grassy island with a fountain or a tree, and a painted ring.
       add("curveLine", { x: x + 0.5, y: 0.064, z: z - 0.5, sx: 0.8, sy: 1, sz: 0.8, ry: Math.PI, color: 0xffffff });
@@ -705,40 +695,6 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       return;
     }
     const straight = m === 5 || m === 10 || m === 1 || m === 4 || m === 2 || m === 8;
-    // A winding street (src/lib/city/layout waveOf): dusty verges, and the asphalt sweeping across
-    // the tile in two pieces through its start, middle and end.
-    if (straight && t.wave && t.crossing === undefined && !t.works && !t.incident) {
-      add("ground", { x, y: 0, z, sx: 1, sy: 0.055, sz: 1, ry: 0, color: VERGE });
-      const along = m === 10;
-      const [o0, o1, o2] = t.wave;
-      const pts = along
-        ? [[x - 0.5, z + o0], [x, z + o1], [x + 0.5, z + o2]]
-        : [[x + o0, z - 0.5], [x + o1, z], [x + o2, z + 0.5]];
-      for (let k = 0; k < 2; k++) {
-        const [ax, az] = pts[k];
-        const [bx, bz] = pts[k + 1];
-        const len = Math.hypot(bx - ax, bz - az);
-        const ry = Math.atan2(-(bz - az), bx - ax);
-        const mx = (ax + bx) / 2;
-        const mz = (az + bz) / 2;
-        add("ground", { x: mx, y: 0, z: mz, sx: len + 0.04, sy: 0.062, sz: ROAD_W, ry, color: ASPHALT });
-        add("paint", { x: mx, y: 0.063, z: mz, sx: 0.2, sy: 0.005, sz: 0.035, ry, color: 0xffffff });
-      }
-      // A street light on every other stretch, on the verge, on the side the road leans away from.
-      if ((x + z) % 2 === 0) {
-        const side = o1 > 0 ? -0.42 : 0.42;
-        const lx = along ? x : x + side;
-        const lz = along ? z + side : z;
-        add("trunk", { x: lx, y: 0.06, z: lz, sx: 0.3, sy: 0.5, sz: 0.3, ry: 0, color: 0x495057 });
-        add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
-      }
-      if (near) {
-        powerLine(x, z, along, add);
-        // Now and then a hawker on the wider verge (the side the road leans away from).
-        if (hashish(x * 3.1 + z, 91) < 0.14) roadsideSeller(x, z, along, o1 > 0 ? -0.36 : 0.36, t.r[3], add);
-      }
-      return;
-    }
     if (straight) {
       const along = m === 10 || m === 2 || m === 8;
       // A street light on every other stretch, alternating sides.
@@ -750,6 +706,10 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         add("lamp", { x: lx - (along ? 0 : side * 0.12), y: 0.56, z: lz - (along ? side * 0.12 : 0), sx: 0.11, sy: 0.07, sz: 0.11, ry: 0, color: 0xffffff });
       }
       if (near && !t.express && (m === 5 || m === 10)) powerLine(x, z, along, add);
+      // Now and then a hawker under an umbrella on the kerb.
+      if (near && !t.express && (m === 5 || m === 10) && t.crossing === undefined && !t.works && !t.incident && hashish(x * 3.1 + z, 91) < 0.14) {
+        roadsideSeller(x, z, along, (x * 3 + z) % 4 < 2 ? -0.44 : 0.44, t.r[3], add);
+      }
       if (t.crossing !== undefined) crossingParts(t, t.crossing, along, add);
       else {
         for (const o of [-0.25, 0.25]) {
@@ -1007,6 +967,19 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       tree(-0.38, 0.36, 0.4, r[0]);
       break;
     }
+    case "range": {
+      // A shooting range: a long, low, windowless block (dark grey, an orange band), a big target
+      // on the front, a covered entrance, a few cars, and an earth berm behind.
+      B(0, 0.08, -0.06, 0.8, 0.42, 0.66, 0x4a4f57);
+      B(0, 0.5, -0.06, 0.82, 0.04, 0.68, 0x2b2f35);
+      B(0, 0.36, 0.272, 0.8, 0.05, 0.006, 0xe8590c, 0, "paint");
+      for (const [rr, c, dz] of [[0.13, 0xf8f9fa, 0], [0.1, 0xe8590c, 0.002], [0.065, 0xf8f9fa, 0.004], [0.03, 0xe8590c, 0.006]] as const) B(0.2, 0.22, 0.276 + dz, rr * 2, 0.005, rr * 2, c, Math.PI / 2, "disc", Math.PI / 2);
+      B(-0.2, 0.08, 0.3, 0.2, 0.2, 0.08, 0x2b2f35);
+      B(-0.2, 0.28, 0.33, 0.28, 0.025, 0.16, 0xe8590c);
+      add("roof", { x, y: 0.08, z: z - 0.42, sx: 0.6, sy: 0.12, sz: 0.06, ry: 0, color: 0x6b8e4e });
+      for (let k = 0; k < 2; k++) B(-0.3 + k * 0.5, 0.08, 0.42, 0.13, 0.06, 0.07, [0x1a1b1e, 0xadb5bd][k]);
+      break;
+    }
     case "fuel": {
       const brand = [0xe03131, 0x1971c2, 0x2f9e44, 0xf08c00][Math.floor(r[2] * 4)];
       for (const [px, pz] of [[-0.32, -0.2], [0.32, -0.2], [-0.32, 0.25], [0.32, 0.25]]) {
@@ -1025,6 +998,28 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         tree(Math.cos(a) * 0.28, Math.sin(a) * 0.28, 0.7 + ((r[3] * (k + 1)) % 0.4), (r[0] + k * 0.37) % 1);
       }
       add("disc", { x, y: 0.08, z, sx: 0.32, sy: 0.01, sz: 0.32, ry: 0, color: 0xe9dcc3 });
+      // Parks are fun parks: a ride or a stall on each (go in for the whole amusement park).
+      const fun = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x69db7c][Math.floor(r[2] * 5)];
+      const ride = Math.floor(r[3] * 4);
+      if (ride === 0) {
+        // A carousel: a striped canopy on a pole.
+        B(0, 0.08, 0, 0.36, 0.03, 0.36, 0xf8f0e3, 0, "cyl");
+        B(0, 0.11, 0, 0.04, 0.22, 0.04, 0xffd43b, 0, "cyl");
+        B(0, 0.33, 0, 0.42, 0.14, 0.42, fun, 0, "cone");
+      } else if (ride === 1) {
+        // A swing ride: a tall pole, the turning top.
+        B(0, 0.08, 0, 0.05, 0.6, 0.05, 0xdee2e6, 0, "cyl");
+        B(0, 0.62, 0, 0.36, 0.06, 0.36, fun, 0, "cyl");
+        B(0, 0.68, 0, 0.12, 0.08, 0.12, 0xffd43b, 0, "cone");
+      } else if (ride === 2) {
+        // A bouncy castle.
+        B(0, 0.08, 0, 0.3, 0.12, 0.3, fun);
+        for (const [cx, cz] of [[-0.13, -0.13], [0.13, -0.13], [-0.13, 0.13], [0.13, 0.13]]) B(cx, 0.08, cz, 0.06, 0.2, 0.06, 0xffffff, 0, "cyl");
+      } else {
+        // A food stall with a striped awning.
+        B(0, 0.08, 0, 0.22, 0.1, 0.12, 0xfff3bf);
+        B(0, 0.2, 0, 0.26, 0.02, 0.16, fun);
+      }
       break;
     }
     case "trees":
@@ -1037,11 +1032,8 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
       tree(0.36, -0.36, 0.6, r[2]);
       break;
     case "ferris":
-      // The legs; the turning wheel is added separately (see landmarks).
-      for (const o of [-0.2, 0.2]) {
-        add("building", { x: x + o, y: 0.08, z, sx: 0.05, sy: 1.25, sz: 0.05, ry: 0, color: 0xdee2e6 });
-      }
-      add("building", { x, y: 0.08, z: z + 0.32, sx: 0.5, sy: 0.12, sz: 0.2, ry: 0, color: 0xf08c6b });
+      // The wheel, its A-frames and deck are added separately (see addFerris); a paved yard here.
+      add("ground", { x, y: 0.08, z, sx: 0.9, sy: 0.01, sz: 0.9, ry: 0, color: 0xd8d2c4 });
       break;
     case "turbine":
       add("trunk", { x, y: 0.08, z, sx: 1.1, sy: 2.6, sz: 1.1, ry: 0, color: 0xf1f3f5 });
@@ -1066,13 +1058,9 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
           B(px, 0.1, pz, 0.22, 0.05, 0.06, 0x8d5a3b);
           tree(-px, pz, 0.35, r[0]);
         }
-      } else if (r[1] < 0.22 && !t.rail) {
-        // A statue on a plinth in the middle of the square.
-        statue(B, 0, 0, 0.7);
       } else {
-        add("disc", { x, y: 0.1, z, sx: 0.3, sy: 0.12, sz: 0.3, ry: 0, color: 0xcfd6dd });
-        add("waterDisc", { x, y: 0.22, z, sx: 0.25, sy: 0.02, sz: 0.25, ry: 0, color: WATER });
-        add("cyl", { x, y: 0.22, z, sx: 0.04, sy: 0.12, sz: 0.04, ry: 0, color: 0xcfd6dd });
+        // One of eight kinds of square (./city/plaza-kit): statue, fountain, clock tower, bandstand...
+        plazaParts(t, B, tree, WATER);
       }
       break;
     case "school":
@@ -1700,6 +1688,7 @@ export function CityView({
   onHomeFloors,
   gateIn = 0,
   homeFloorTo = null,
+  serve = null,
   onBubbleSignIn,
   onBroken,
 }: Props) {
@@ -1736,6 +1725,7 @@ export function CityView({
     /** From a landmark's entrance, on inside. */
     goInside: () => void;
     setHomeFloor: (to: number) => void;
+    serveFood: (ids: string[]) => boolean;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
@@ -2305,39 +2295,13 @@ export function CityView({
     }
 
     function addFerris(px: number, pz: number, rotY: number, tile: number, scale: number) {
-      const obj = new THREE.Group();
-      const wheel = new THREE.Group();
-      wheel.add(new THREE.Mesh(lmGeo.rim, lmMat.frame));
-      for (let k = 0; k < 4; k++) {
-        const sp = new THREE.Mesh(lmGeo.spoke, lmMat.frame);
-        sp.rotation.z = (k * Math.PI) / 4;
-        wheel.add(sp);
-      }
-      const cabins: THREE.Mesh[] = [];
-      for (let k = 0; k < 8; k++) {
-        const c = new THREE.Mesh(lmGeo.cabin, lmMat.cabins[k % lmMat.cabins.length]);
-        const a = (k / 8) * Math.PI * 2;
-        c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, 0);
-        c.castShadow = true;
-        wheel.add(c);
-        cabins.push(c);
-      }
-      wheel.position.y = 1.35;
-      obj.add(wheel);
-      if (scale !== 1) {
-        // Legs for the bigger funfair wheel (the single-tile one has legs drawn with the tile).
-        for (const o of [-0.2, 0.2]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 0.05), lmMat.frame);
-          leg.position.set(o, 0.7, 0);
-          obj.add(leg);
-        }
-      }
+      const { obj, wheel, cabins } = ferrisWheel();
       obj.position.set(px, 0, pz);
       obj.rotation.y = rotY;
       obj.userData.scale = scale;
-      // A slow wheel (about 75 s a turn), its cabins hanging upright as it goes round.
+      // A slow wheel (about 90 s a turn), its gondolas hanging level as it goes round.
       obj.userData.cabins = cabins;
-      landmarks.push({ obj, spin: wheel, tile, speed: (Math.PI * 2) / 75 });
+      landmarks.push({ obj, spin: wheel, tile, speed: (Math.PI * 2) / 90 });
       wheels.push({ obj, wheel, tile, scale });
       life.add(obj);
     }
@@ -2869,7 +2833,14 @@ export function CityView({
           life.add(park.group);
         }
         if (t.structure?.anchor && t.structure.type === "funfair") {
-          addFerris(t.x + 0.05, t.z, Math.PI / 4, t.i, 1.15);
+          // A real fun park bigger than 2 × 2 (Apapa's, Ikorodu's): its rides drawn bigger, in the
+          // middle of its grounds (as structureParts draws them).
+          const W = t.structure.w ?? 2;
+          const D = t.structure.d ?? 2;
+          const big = W > 2 || D > 2 ? Math.min(W, D) / 2 : 1;
+          const at = (lx: number, lz: number) => (big > 1 ? [t.x + (W - 1) / 2 + (lx - 0.5) * big, t.z + (D - 1) / 2 + (lz - 0.5) * big] : [t.x + lx, t.z + lz]);
+          const [fx, fz] = at(0.05, 0);
+          addFerris(fx, fz, Math.PI / 4, t.i, 1.3 * Math.min(1.8, big));
           // A carousel that turns
           const obj = new THREE.Group();
           const spin = new THREE.Group();
@@ -2888,7 +2859,9 @@ export function CityView({
             spin.add(pole, horse);
           }
           obj.add(spin);
-          obj.position.set(t.x + 0.95, 0, t.z + 0.15);
+          const [cx, cz] = at(0.95, 0.15);
+          obj.position.set(cx, 0, cz);
+          obj.scale.setScalar(Math.min(1.8, big));
           landmarks.push({ obj, spin, tile: t.i, speed: 0.8, axis: "y" });
           life.add(obj);
         }
@@ -5649,6 +5622,8 @@ export function CityView({
       poles?: { x: number; z: number }[];
       /** Money sprayed here, flying and lying on the floor (./city/money-spray). */
       money?: ReturnType<typeof createMoneySpray> | null;
+      /** Waiters bringing food, and what's on the tables (./city/serve). */
+      service?: ReturnType<typeof createService> | null;
       crowd: Figures | null;
       dancers: Figures | null;
       dancersKey: string;
@@ -5811,7 +5786,39 @@ export function CityView({
         camAt: null,
         free: [],
       };
-      if (lvl.kind === "interior") {
+      if (lvl.theme === "amusement") {
+        // A park: a whole amusement park, drawn over the city like a room (with its own sky).
+        const street = addressOf(plan, anchor).replace(/^\d+\s+/, "").split(" ").slice(0, -1).join(" ") || plan.city.name;
+        const fair = createAmusementPark(key, anchor.structure?.name ?? anchor.name ?? `${street} Fun Park`);
+        const figures = createFigures(npcs, fair.spots, { key, tags: true });
+        st.holder.add(fair.group, figures.group);
+        const rot = cameraYaw() - fair.views[0].yaw;
+        st.holder.rotation.y = rot;
+        st.scene = new THREE.Scene();
+        st.scene.add(st.holder);
+        st.unit = (Math.min(lvl.hw, lvl.hd) * 0.85) / (Math.max(fair.w, fair.d) / 2);
+        st.views = fair.views.map((v) => {
+          const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, rot);
+          return { p: new THREE.Vector3(st.origin.x + e.x * st.unit, st.origin.y, st.origin.z + e.z * st.unit), yaw: v.yaw + rot, pitch: v.pitch, lx: v.x, lz: v.z };
+        });
+        st.interior = fair;
+        st.figures = figures;
+        st.npc3d = upgradeNpcs(figures.figs, npcs, { max: 30 });
+        fair.setNight(carNight);
+        st.update = fair.update;
+        setupUse(st, fair.seats, fair.items, fair.spots, npcs.length);
+        // A crowd of day-trippers (the last of the spots: players here stand in the first ones).
+        const around = fair.spots.slice(Math.max(npcs.length + 12, fair.spots.length - 56));
+        const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
+        if (people.length) {
+          st.crowd = createFigures(people, around.map((sp) => ({ ...sp, act: "talk" as const })), { key, inert: true, tags: false });
+          st.holder.add(st.crowd.group);
+          st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
+        }
+        // The grounds are big and open: walk anywhere inside the fence.
+        st.walker = createGroundsWalker(-fair.w / 2 + 2, fair.w / 2 - 2, -fair.d / 2 + 2, fair.d / 2 - 2);
+        st.poles = [];
+      } else if (lvl.kind === "interior") {
         const homeLevel = homeFloor.get(anchor.i) ?? 0;
         if (homePlan) st.homeKey = `${JSON.stringify(homePlan)}#${homeLevel}`;
         const interior = homePlan ? createHomeInterior(homePlan, homeLevel, building) : createInterior({
@@ -5921,6 +5928,7 @@ export function CityView({
       st.dancers?.dispose();
       st.dancers3d?.dispose();
       st.money?.dispose();
+      st.service?.dispose();
       st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
@@ -6565,9 +6573,9 @@ export function CityView({
       wheels.forEach((w, i) => {
         const t = tileById.get(w.tile);
         const name = t?.name ?? (t?.structure ? `${t.structure.name} wheel` : t ? `Ferris wheel, ${shortAddress(addressOf(plan, t))}` : "Ferris wheel");
-        out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris });
+        out.push({ kind: "ferris", index: i, name, capacity: RIDE_CAP.ferris, tile: w.tile });
       });
-      slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide }));
+      slidesFlat.forEach((sl, i) => out.push({ kind: "slide", index: i, name: sl.name, capacity: RIDE_CAP.slide, tile: sl.tile }));
       for (let i = 0; i < aircraft.count; i++) out.push({ kind: "heli", index: i, name: `${city} Sky Tours · helicopter ${i + 1}`, capacity: RIDE_CAP.heli });
       const key = out.map((r) => `${r.kind}${r.index}:${r.name}`).join("|");
       if (key !== ridesKey) {
@@ -6605,8 +6613,8 @@ export function CityView({
         const w = wheels[r.index];
         let best = 0;
         let bestD = 9;
-        for (let k = 0; k < 8; k++) {
-          const a = (k / 8) * Math.PI * 2 + w.wheel.rotation.z;
+        for (let k = 0; k < FERRIS.cabins; k++) {
+          const a = (k / FERRIS.cabins) * Math.PI * 2 + w.wheel.rotation.z;
           const d = Math.abs(turnTo(a, -Math.PI / 2));
           if (d < bestD) {
             bestD = d;
@@ -6672,12 +6680,12 @@ export function CityView({
           const w = wheels[r.index];
           if (!w) return false;
           const sc = w.obj.scale.x;
-          const a = (vv.cabinK / 8) * Math.PI * 2 + w.wheel.rotation.z;
-          const lx = Math.cos(a) * 0.62 * sc;
+          const a = (vv.cabinK / FERRIS.cabins) * Math.PI * 2 + w.wheel.rotation.z;
+          const lx = Math.cos(a) * FERRIS.r * sc;
           const ry = w.obj.rotation.y;
           out.x = w.obj.position.x + Math.cos(ry) * lx;
           out.z = w.obj.position.z - Math.sin(ry) * lx;
-          out.y = (1.35 + Math.sin(a) * 0.62) * sc;
+          out.y = (FERRIS.hub + Math.sin(a) * FERRIS.r - FERRIS.hang) * sc;
           out.yaw = ry + (vv.flip ? Math.PI : 0);
           out.speed = 0;
           return true;
@@ -6734,7 +6742,7 @@ export function CityView({
           sl.v = 0.32;
           playSfx("whoosh");
         } else if (sl.phase === "slide") {
-          sl.v = Math.min(1.3, sl.v + dt * 0.85);
+          sl.v = Math.min(1.0, sl.v + dt * 0.6);
           sl.d += sl.v * dt;
           if (sl.d >= sl.length) {
             sl.d = sl.length;
@@ -6773,6 +6781,29 @@ export function CityView({
       if (key === homeFloorsKey) return;
       homeFloorsKey = key;
       cb.current.onHomeFloors?.(f);
+    }
+    /**
+     * Food you've ordered (menu ids): a waiter brings it from the way in to your seat and sets it
+     * down on the table in front of you. False when you're not sitting down inside.
+     */
+    function serveFood(ids: string[]) {
+      if (view?.kind !== "place" || !view.stage.interior) return false;
+      const st = view.stage;
+      const inside = st.interior;
+      if (!inside) return false;
+      const m = mySeatNow ? /:seat:(\d+)$/.exec(mySeatNow) : null;
+      const seat = m ? st.seats[Number(m[1])] : undefined;
+      if (!seat) return false;
+      const dishes = ids.flatMap((id) => {
+        const it = MENU_BY_ID.get(id);
+        return it ? [it.dish] : [];
+      });
+      if (!dishes.length) return false;
+      const from = st.views[0] ?? { lx: 0, lz: 0 };
+      st.service ??= createService(st.holder, inside.group, { x: from.lx, z: from.lz });
+      st.service.clear();
+      st.service.serve({ x: seat.x, z: seat.z, ry: seat.ry }, dishes);
+      return true;
     }
     /** Inside a planned home: go to one of its floors (its Floor button). */
     function setHomeFloor(to: number) {
@@ -7212,6 +7243,7 @@ export function CityView({
         st.dancers3d?.update(dt3);
         st.crowd3d?.update(dt3);
         st.money?.update(dt3);
+        st.service?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -7318,7 +7350,7 @@ export function CityView({
     function tapExtras(i: number) {
       const t = tileById.get(i);
       if (!t || !isRevealed) return;
-      const fountain = t.kind === "plaza" || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
+      const fountain = (t.kind === "plaza" && !t.forecourt && plazaDesign(t) === "fountain") || (t.kind === "road" && t.roundabout && t.r[1] < 0.5);
       if (fountain) {
         splashScene(t);
         playSfx("splash");
@@ -8166,7 +8198,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor, serveFood };
 
     return () => {
       alive = false;
@@ -8265,6 +8297,11 @@ export function CityView({
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+  // Your order arriving at your table.
+  const serveKey = serve ? `${serve.ids.join(",")}|${serve.at}` : "";
+  useEffect(() => {
+    if (serveKey) api.current?.serveFood(serveKey.split("|")[0].split(","));
+  }, [serveKey]);
   // A planned home's Floor button.
   const homeFloorKey = homeFloorTo ? `${homeFloorTo.to}|${homeFloorTo.at}` : "";
   useEffect(() => {

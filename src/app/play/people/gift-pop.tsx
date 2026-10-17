@@ -1,5 +1,6 @@
 "use client";
 
+import { OnTop } from "../on-top";
 import { cash } from "@/lib/world/value";
 import { useEffect, useState } from "react";
 import { BookOpen, Car, Coins, Dumbbell, Gem, Gift, Handshake, Heart, Palette, Shirt, Smartphone, Sofa, X } from "lucide-react";
@@ -70,7 +71,7 @@ export function GiftPop({ gift, more, onDone, onDoor, onGifts }: { gift: FeedIte
 
   const Icon = r.kind === "hug" ? Heart : r.kind === "handshake" ? Handshake : r.kind === "mint" ? Coins : r.kind === "door" ? Gift : r.category ? CATEGORY_ICON[r.category] : Gift;
   return (
-    <div className="fixed inset-0 z-[75] flex flex-col items-center justify-center bg-black/80 px-6 text-center text-white" role="dialog" aria-label="Your gift">
+    <OnTop className="fixed inset-0 flex flex-col items-center justify-center bg-black/80 px-6 text-center text-white" role="dialog" aria-label="Your gift">
       <style>{CSS}</style>
       <button onClick={onDone} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] grid size-10 place-items-center rounded-full bg-white/15" aria-label="Close">
         <X className="size-5" />
@@ -118,7 +119,7 @@ export function GiftPop({ gift, more, onDone, onDoor, onGifts }: { gift: FeedIte
           {more > 0 ? `Next gift (${more} more)` : "Lovely"}
         </button>
       </div>
-    </div>
+    </OnTop>
   );
 }
 

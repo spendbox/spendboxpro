@@ -98,11 +98,14 @@ export function kitCar(k: Kit, color: number, kind: "car" | "suv" | "danfo" = "c
 /** The streets along a route: each straight stretch, carried on past the junctions at both ends. */
 function streetsOf(route: Route): Street[] {
   const out: Street[] = [];
+  // Past a junction you turn at, the street carries on a little way; at one you go straight
+  // across, the two stretches meet in its middle and a cross street goes off both sides.
+  const over = (tn: Route["turns"][number]) => (tn.dir === 0 ? tn.r : tn.r + 34);
   route.lines.forEach((ln, i) => {
     const first = i === 0;
     const last = i === route.lines.length - 1;
-    const before = first ? 140 : route.turns[i - 1].r + 34;
-    const after = last ? 140 : route.turns[i].r + 34;
+    const before = first ? 140 : over(route.turns[i - 1]);
+    const after = last ? 140 : over(route.turns[i]);
     const p = route.at(ln.s0);
     const f = ahead(ln.yaw);
     const len = ln.s1 - ln.s0 + before + after;
@@ -111,6 +114,14 @@ function streetsOf(route: Route): Street[] {
     if (!last) junctions.push(before + (ln.s1 - ln.s0) + route.turns[i].r);
     out.push({ ox: p.x - f.fx * before, oz: p.z - f.fz * before, yaw: ln.yaw, len, junctions, s0: ln.s0, uAtS0: before });
   });
+  for (const tn of route.turns) {
+    if (tn.dir !== 0) continue;
+    const p = route.at(tn.s0 + tn.r);
+    const f = ahead(p.yaw + Math.PI / 2);
+    const half = 34;
+    // Off the route (s0 far away), so nothing looks for your stop on it.
+    out.push({ ox: p.x - f.fx * half, oz: p.z - f.fz * half, yaw: p.yaw + Math.PI / 2, len: half * 2, junctions: [half], s0: -1e6, uAtS0: 0 });
+  }
   return out;
 }
 

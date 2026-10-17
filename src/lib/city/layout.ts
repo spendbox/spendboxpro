@@ -41,6 +41,8 @@ export type TileKind =
   // not basketball): on busy streets all over town, see baseTile.
   | "bank"
   | "lawcourt"
+  // A shooting range (six indoor lanes): in some neighbourhoods, see pickFeature.
+  | "range"
   | "club"
   | "restaurant"
   | "structure"
@@ -155,11 +157,6 @@ export type Tile = {
    * big interchange drawn two or more tiles wide): plain asphalt, no lights or crossings.
    */
   wide?: boolean;
-  /**
-   * A straight road's middle, as offsets across the tile at its start edge, middle and end edge
-   * (a winding street, see waveOf). Missing: dead centre.
-   */
-  wave?: [number, number, number];
   /** A real place's expressway (no pavements: nobody walks along it). */
   express?: boolean;
   /** A real place's tile kept clear of buildings: under a deck, beside a railway, a station's site. */
@@ -200,6 +197,7 @@ export const KIND_LABEL: Record<TileKind, string> = {
   fire: "Fire station",
   bank: "Bank",
   lawcourt: "Law court",
+  range: "Shooting range",
   club: "Nightclub",
   restaurant: "Restaurant",
   structure: "Landmark",
@@ -1147,6 +1145,7 @@ function pickFeature(plan: CityPlan, fx: number, fz: number) {
     const roll = hash(fx, fz, plan.seed + 953);
     if (roll < 0.36) kind = "bank";
     else if (roll < 0.46) kind = "lawcourt";
+    else if (roll < 0.52) kind = "range";
   }
   return { x: best.x, z: best.z, kind };
 }
@@ -1219,6 +1218,8 @@ const STRUCTURES_BY_ZONE: { min: number; chance: number; types: StructureType[] 
 
 /** Too big or too particular to make up in a real place: only where the map has them. */
 const MAP_ONLY = new Set<StructureType>(["airport", "port", "military", "power", "dam", "oilrig", "solar"]);
+/** Made up in a made-up city, but in a real place only where the map has them (see structureAt). */
+const REAL_ONLY = new Set<StructureType>(["funfair", "waterpark"]);
 
 /**
  * The smaller sports venues: a basketball court, a boxing arena and a wrestling arena, each on
@@ -1288,7 +1289,9 @@ function structureAt(plan: CityPlan, x: number, z: number) {
       let type = types[Math.floor(hash(ax, az, plan.seed + 502) * types.length)];
       // A dam needs water next to it (the river or a lake); otherwise it's a power station.
       if (type === "dam" && !nearWater(plan, ax, az)) type = "power";
-      found = structureNamed(plan, type, ax, az);
+      // A real place's funfairs and water parks are only its real ones (its landmarks): made-up
+      // ones put a Ferris wheel or slides on every other street. Those lots stay ordinary lots.
+      found = plan.region && REAL_ONLY.has(type) ? null : structureNamed(plan, type, ax, az);
     }
     plan.structures.set(key, found);
   }
@@ -1451,6 +1454,8 @@ function tileName(plan: CityPlan, t: Tile): string | undefined {
       return bankName(plan, x, z);
     case "lawcourt":
       return courtName(plan, x, z);
+    case "range":
+      return rangeName(plan, x, z);
     case "clock":
       return roll < 0.7 ? any("clock", 1) : undefined;
     case "tower":
@@ -1496,6 +1501,12 @@ function courtName(plan: CityPlan, x: number, z: number) {
   const roll = hash(x, z, plan.seed + 546);
   const kind = roll < 0.6 ? "Magistrates' Court" : roll < 0.85 ? "High Court" : "Customary Court";
   return `${localName(plan, x, z)} ${kind}`;
+}
+
+/** A shooting range's name: "Bullseye Range, Akoka". */
+function rangeName(plan: CityPlan, x: number, z: number) {
+  const brands = ["Bullseye Range", "Eagle Eye Shooting Club", "Range 9", "Steady Aim Range", "Marksman's Club", "Deadshot Range", "Centre Mass Range"];
+  return `${brands[Math.floor(hash(x, z, plan.seed + 547) * brands.length) % brands.length]}, ${localName(plan, x, z)}`;
 }
 
 /** A name for a club or restaurant floor inside a bigger building (stable for the tile). */
@@ -1808,65 +1819,10 @@ function roadTile(plan: CityPlan, x: number, z: number, r: Tile["r"]): Tile {
     const express = kind === "motorway" || kind === "trunk" || undefined;
     // Pedestrian crossings: where the map has one, and now and then on busy streets.
     const crossing = straight && !works && !incident ? crossingOf(plan, x, z, mask) : undefined;
-    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express, wave: straight ? waveOf(plan, x, z, mask === 10) : undefined };
+    if (crossing !== undefined) return { i: -1, x, z, kind: "road", top: 0.05, road: dir, mask, roundabout: false, r, crossing, express };
     if (express) return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident, express };
   }
-  const t: Tile = { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
-  if (straight) t.wave = waveOf(plan, x, z, mask === 10);
-  return t;
-}
-
-// ---------------------------------------------------------------- winding streets
-// Streets don't run dead straight between junctions: the asphalt winds gently from side to side
-// inside its strip of tiles (docs/STREETS.md). Which tiles are road never changes (so no building,
-// address or property moves); only where the road is drawn on them, and where the cars drive.
-
-/** The furthest the middle of the road strays from the middle of its tiles (tile widths). */
-export const WAVE_MAX = 0.17;
-/** The longest piece of straight road that winds as one (longer ones are cut into pieces). */
-const WAVE_REACH = 16;
-
-/** Is (x, z) part of a straight stretch that winds (along x or z)? */
-function winds(plan: CityPlan, x: number, z: number, alongX: boolean) {
-  if (!isRoad(plan, x, z) || wet(plan, x, z)) return false;
-  if (roadMask(plan, x, z) !== (alongX ? 10 : 5)) return false;
-  const kind = plan.region?.roadAt(x, z)?.kind;
-  return kind !== "motorway" && kind !== "trunk";
-}
-
-/**
- * Where the road's middle is on a straight tile, as offsets across it (+z for a road along x, +x
- * for one along z) at its start edge, its middle and its end edge. The stretch between two
- * junctions (or bends, dead ends, expressways, water) bends once or twice, smoothly, and meets
- * each end dead centre, so it joins the next tile's road.
- */
-export function waveOf(plan: CityPlan, x: number, z: number, alongX: boolean): [number, number, number] | undefined {
-  if (!winds(plan, x, z, alongX)) return undefined;
-  const step = (k: number): [number, number] => (alongX ? [x + k, z] : [x, z + k]);
-  // Very long straight roads wind in pieces of up to WAVE_REACH tiles (cut at the same places
-  // whichever tile asks, so every tile of a piece agrees on its shape).
-  const c0 = alongX ? x : z;
-  const piece = Math.floor(c0 / WAVE_REACH);
-  const same = (k: number) => Math.floor((c0 + k) / WAVE_REACH) === piece;
-  let lo = 0;
-  while (same(lo - 1) && winds(plan, ...step(lo - 1), alongX)) lo--;
-  let hi = 0;
-  while (same(hi + 1) && winds(plan, ...step(hi + 1), alongX)) hi++;
-  // The stretch runs from the start edge of its first tile to the end edge of its last.
-  const a = (alongX ? x : z) + lo - 0.5;
-  const b = (alongX ? x : z) + hi + 0.5;
-  const len = b - a;
-  if (len < 2) return undefined;
-  // The same stretch winds the same way from every one of its tiles: keyed by where it starts.
-  const [kx, kz] = step(lo);
-  const h1 = hash(kx * 2 + (alongX ? 1 : 0), kz, plan.seed + 7301);
-  const h2 = hash(kz, kx * 2 + (alongX ? 1 : 0), plan.seed + 7302);
-  const bends = len >= 6 && h2 < 0.45 ? 2 : 1;
-  const amp = Math.min(WAVE_MAX, 0.045 * len) * (h1 < 0.5 ? -1 : 1) * (0.7 + 0.3 * h2);
-  const at = (v: number) => amp * Math.sin((Math.PI * bends * (v - a)) / len);
-  const c = alongX ? x : z;
-  const r3 = (v: number) => Math.round(v * 1000) / 1000;
-  return [r3(at(c - 0.5)), r3(at(c)), r3(at(c + 0.5))];
+  return { i: -1, x, z, kind: "road", top: works ? 0.45 : roundabout ? 0.3 : 0.05, road: dir, mask, roundabout, r, works: works || undefined, incident };
 }
 
 /** A pedestrian crossing on a straight stretch of a real place's road, or undefined. */
@@ -1969,10 +1925,13 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
 
   const density = densityAt(plan, x, z);
 
-  const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
+  const greenAt = (gx: number, gz: number) => smoothNoise(gx / 6 + 31, gz / 6 - 17, s + 11) - plan.style.green;
+  const green = greenAt(x, z);
   if (green > 0.7 && density < 0.6) {
     if (green > 0.82 && r[0] < 0.3) return { i, x, z, kind: "pond", top: 0.5, r };
-    if (r[3] < 0.035) return { i, x, z, kind: "ferris", top: 2.6, r };
+    // A Ferris wheel in one park lot in 400 or so (they were far more common: too many), never
+    // anywhere but a park, and only well inside a big one (parkland on every side).
+    if (r[3] < 0.0025 && [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].every(([dx, dz]) => greenAt(x + dx * 2, z + dz * 2) > 0.7)) return { i, x, z, kind: "ferris", top: 2.85, r };
     return { i, x, z, kind: "park", top: 0.9, r };
   }
   const nextToRoad = isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1);
@@ -2002,11 +1961,10 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   // The neighbourhood's own place (a school, a mosque or church, a pitch, a playground…).
   const feature = featureAt(plan, x, z);
   if (feature) {
-    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4, bank: 1.1, lawcourt: 1.3 };
+    const tops: Partial<Record<TileKind, number>> = { school: 0.9, worship: 1.6, pitch: 0.3, playground: 0.5, monument: 1.4, bank: 1.1, lawcourt: 1.3, range: 0.75 };
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
-  if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.6, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };
   if (r[0] < 0.182) return { i, x, z, kind: "mast", top: 4, r };

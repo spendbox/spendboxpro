@@ -200,4 +200,75 @@ export const THING_MOMENTS: MomentDef[] = [
     { label: "Lend it without your name", tone: "kind", traits: { giving: 2 }, outcomes: [{ text: "Thousands of schoolchildren see it. Nobody knows it's yours, and that's fine.", rep: 2, effect: "blessed" }] },
     { label: "Keep it at home", tone: "calm", traits: { giving: -1 }, outcomes: [{ text: "It stays on your wall, where only your guests see it." }] },
   ]),
+  // ---------------------------------------------------------------- more of your things
+  thing(["fridge"], "fridge", ["home"], "🧊", "\"Abeg, keep my meat\"", "NEPA has been off for two days and your fridge is the only cold one in the compound (somehow). Your neighbour is at the door with a bag of meat for her daughter's birthday party. \"Just till Saturday.\"", [
+    { label: "Make room for it", tone: "kind", traits: { people: 2, giving: 1 }, outcomes: [{ text: "Saturday comes, the meat is perfect, and you're the first person served at the party.", rep: 2 }] },
+    { label: "Make room, but only for hers", tone: "calm", outcomes: [{ text: "Then the woman upstairs brings fish. Then her sister brings chicken. You draw the line at the goat head.", rep: 1 }] },
+    { label: "Say it's already full", tone: "calm", traits: { truth: -1, people: -1 }, outcomes: [{ text: "She looks past you at your nearly empty fridge. She goes.", rep: -1 }] },
+  ]),
+  thing(["gas_cooker"], "gas", ["home"], "🔥", "The gas has finished", "Your gas has finished halfway through cooking stew, at 9pm, with guests coming tomorrow. The gas man down the road says he'll come and refill it tonight, for {ask} \"night rate\".", [
+    { label: "Pay the night rate", tone: "calm", traits: { daring: -1 }, outcomes: [{ text: "He arrives with the cylinder on his head. The stew is finished by eleven.", pay: 1 }] },
+    { label: "Borrow your neighbour's cylinder", tone: "kind", traits: { people: 2 }, outcomes: [{ text: "She lends it gladly, and you bring her a plate of the stew. Fair trade.", rep: 1 }] },
+    { label: "Finish it on charcoal", tone: "bold", traits: { ways: 2 }, outcomes: [{ text: "Smoky, slow, and somehow the best stew you've ever made. Your guests ask for the recipe.", rep: 1 }] },
+  ], SMALL),
+  thing(["sneakers"], "sneaker_step", ["street", "night", "food"], "👟", "Somebody stepped on them", "In the crowd outside the show, a man steps square on your white designer sneakers and leaves a muddy footprint. He looks down. \"Ah, sorry. Are they original?\"", [
+    { label: "Laugh and wipe them", tone: "kind", traits: { wrongs: 2 }, outcomes: [{ text: "\"Original, yes. Clean, not any more.\" He laughs and buys you a drink.", rep: 1 }] },
+    { label: "Make him clean them", tone: "bold", traits: { wrongs: -2, daring: 1 }, outcomes: [{ chance: 0.5, text: "He kneels with a handkerchief, and the crowd cheers him on. Spotless.", rep: 1 }, { chance: 0.5, text: "\"For ordinary shoe?\" A crowd gathers. You walk away, footprint and all.", rep: -1 }] },
+    { label: "Ask him the same about his", tone: "bold", traits: { daring: 1 }, outcomes: [{ text: "He looks at his own fake sneakers, then at you, and you both burst out laughing.", rep: 1 }] },
+  ]),
+  thing(["drone"], "drone_fence", ["home", "outdoors"], "🛸", "\"Are you spying on us?\"", "You flew your drone over the street for a nice video. Now your neighbour is at your gate, furious: his wife saw \"a camera in the sky\" over their compound.", [
+    { label: "Show him the video", tone: "calm", traits: { truth: 2 }, outcomes: [{ text: "He watches. His compound looks lovely from above. He asks for a copy.", rep: 1 }] },
+    { label: "Offer to film his daughter's wedding", tone: "kind", traits: { people: 2, giving: 1 }, outcomes: [{ text: "Anger turns into a deal. The wedding video goes round the whole family, with your name at the end.", rep: 3 }] },
+    { label: "Tell him the sky is free", tone: "mean", traits: { wrongs: -1, people: -2 }, outcomes: [{ text: "He reports you to the estate. There's a meeting. There's a rule now.", rep: -2 }] },
+  ]),
+  thing(["football"], "ball_fence", ["street", "outdoors", "home"], "⚽", "Over the wall", "The boys on your street were playing with your football and it's gone over the wall of the big house at the end. The gateman says the madam of the house \"doesn't return balls\".", [
+    { label: "Knock and ask the madam yourself", tone: "bold", traits: { daring: 2, people: 1 }, outcomes: [{ chance: 0.6, text: "The madam turns out to be lovely. She returns the ball and two old ones she'd collected. The boys go mad.", rep: 3 }, { chance: 0.4, text: "She keeps it, on principle. She gives you a lecture about her flowers.", rep: 1 }] },
+    { label: "Buy the boys a new ball", tone: "kind", traits: { giving: 2 }, outcomes: [{ text: "A brand new ball. The boys promise to play facing the other way. They don't.", pay: 1, rep: 2 }] },
+    { label: "Tell them to play somewhere else", tone: "calm", traits: { people: -1 }, outcomes: [{ text: "They drift off, kicking a tin can instead." }] },
+  ], SMALL),
+  thing(["bicycle"], "bicycle", ["street", "home"], "🚲", "Can I borrow your bicycle?", "The neighbour's son wants to borrow your bicycle to go and write an exam across town. \"I'll bring it back by four, I swear.\"", [
+    { label: "Lend it", tone: "kind", traits: { people: 2 }, outcomes: [{ text: "Four o'clock: the bicycle, and a boy who says the paper was easy.", rep: 2 }, { chance: 0.3, text: "Six o'clock: the bicycle, with a flat tyre and a very sorry boy.", rep: 1 }] },
+    { label: "Give him transport money instead", tone: "calm", traits: { giving: 1 }, outcomes: [{ text: "\"Take a bus. Focus on the exam.\" He goes.", pay: 1, rep: 1 }] },
+    { label: "Ride him there yourself", tone: "bold", traits: { daring: 2, people: 1 }, outcomes: [{ text: "Him on the back, you pedalling through traffic. He arrives on time. Your legs never forgive you.", rep: 3 }] },
+  ], SMALL),
+  thing(["car_bike"], "bike_hail", ["street"], "🏍️", "\"Okada! Okada!\"", "You're on your motorbike at the junction and a woman with a big bag waves at you: \"Ojuelegba, how much?\" She thinks you're an okada. She's offering {ask}.", [
+    { label: "Take her, why not", tone: "bold", traits: { people: 1, daring: 1 }, outcomes: [{ text: "Ojuelegba, ten minutes. She pays and asks for your number for tomorrow.", get: 1 }] },
+    { label: "Take her for free", tone: "kind", traits: { giving: 2, people: 1 }, outcomes: [{ text: "\"You no be okada?\" She's so embarrassed she prays for you all the way there.", rep: 2 }] },
+    { label: "\"I'm not an okada, ma\"", tone: "calm", outcomes: [{ text: "\"Ah, sorry o.\" She waves down a real one." }] },
+  ], SMALL),
+  thing(["car_danfo"], "danfo_driver", ["street", "home"], "🚐", "Your driver calls", "Your danfo's driver calls from the garage. The agberos at the park now want {ask} a day from every bus, \"new levy\", or your bus doesn't load.", [
+    { label: "Pay the levy", tone: "calm", traits: { daring: -1 }, outcomes: [{ text: "The bus loads. The levy will rise again next month.", pay: 1 }] },
+    { label: "Go to the park yourself", tone: "bold", traits: { daring: 2, people: 1 }, outcomes: [{ chance: 0.5, text: "You meet the chairman, share a bottle of malt, agree on half. Your driver is impressed.", pay: 0.5, rep: 2 }, { chance: 0.5, text: "The chairman keeps you waiting for two hours, then says the levy is the levy.", pay: 1 }] },
+    { label: "Move to another park", tone: "calm", traits: { truth: 1 }, outcomes: [{ text: "A smaller park, fewer passengers, no levy. Your driver complains, but it works.", rep: 0 }] },
+  ], SMALL),
+  thing(["car_sienna"], "sienna_church", ["worship", "home"], "🚐", "The choir needs your Sienna", "The choir is going to a competition in Ibadan on Saturday and the church bus has broken down. The choir mistress looks at your Sienna, then at you, with great hope.", [
+    { label: "Drive them there yourself", tone: "kind", traits: { people: 2, ways: 1 }, outcomes: [{ text: "Seven singers, three hours, every hymn ever written. They win second place and dedicate it to you.", rep: 3 }] },
+    { label: "Lend it with fuel money", tone: "kind", traits: { giving: 2 }, outcomes: [{ text: "It comes back washed, full of fuel, and smelling of jollof.", pay: 1, rep: 2 }] },
+    { label: "\"It's having problems too\"", tone: "calm", traits: { truth: -2 }, outcomes: [{ text: "They take two buses. On Sunday, someone sees your Sienna outside the mall.", rep: -2 }] },
+  ], MEDIUM),
+  thing(["console"], "console_match", ["home"], "🎮", "FIFA for money", "The boys from the next street have heard you have a console. Their champion wants a FIFA match in your parlour, {ask} on the line, and the whole street wants to watch.", [
+    { label: "Play him", tone: "bold", traits: { daring: 2 }, outcomes: [{ chance: 0.5, text: "Last-minute header! The parlour explodes. You are the street's champion now.", get: 1, rep: 2 }, { chance: 0.5, text: "He beats you 4-0 and celebrates on your sofa.", pay: 1 }] },
+    { label: "Make it a tournament", tone: "kind", traits: { people: 2 }, outcomes: [{ text: "Sixteen players, one bracket, a carton of malt. Best Saturday on the street in years.", pay: 0.3, rep: 3 }] },
+    { label: "Not in your parlour", tone: "calm", traits: { people: -1 }, outcomes: [{ text: "They play at the viewing centre instead. You can hear the shouting from home." }] },
+  ], SMALL),
+  thing(["sunglasses"], "shades_star", ["street", "food", "night"], "🕶️", "\"Are you not that actor?\"", "In your designer sunglasses, two girls at the next table are sure you're a Nollywood star. \"Please, just one picture, we loved you in that film!\"", [
+    { label: "Play along for one picture", tone: "bold", traits: { truth: -1, daring: 1 }, outcomes: [{ text: "One picture, two autographs. You don't even know which film. They're thrilled.", rep: 1 }, { chance: 0.3, text: "The real actor comments on their post: \"Who is this?\" The internet loves it.", rep: 1, effect: "talked_about" }] },
+    { label: "Take the glasses off and laugh", tone: "kind", traits: { truth: 2 }, outcomes: [{ text: "\"Ah! You look like him sha.\" They take a picture with you anyway.", rep: 1 }] },
+    { label: "Keep eating, mysteriously", tone: "calm", outcomes: [{ text: "Silence is what a real star would do. They're even more convinced." }] },
+  ]),
+  thing(["okrika"], "okrika_pocket", ["home", "street"], "👖", "Something in the pocket", "Washing your new okrika jeans, you find something in the back pocket that the last owner, somewhere abroad, forgot: a folded foreign banknote worth about {ask}.", [
+    { label: "Change it and enjoy it", tone: "bold", traits: { giving: -1 }, outcomes: [{ text: "The mallam at the bureau de change counts it twice. Okrika has never paid so well.", get: 1 }] },
+    { label: "Give it to the woman who sold you the jeans", tone: "kind", traits: { truth: 2, giving: 2 }, outcomes: [{ text: "She stares at you, then at the money. \"Nobody has ever brought anything back.\" She gives you two shirts free.", rep: 2 }] },
+    { label: "Keep it as a lucky charm", tone: "calm", traits: { ways: 1 }, outcomes: [{ text: "It goes in your wallet, behind your ID. Lucky things happen. Probably.", effect: "lucky" }] },
+  ], SMALL),
+  thing(["tv"], "tv_final", ["home"], "📺", "The final is tonight", "The cup final is tonight and NEPA has brought light. Somehow the whole compound knows you have the biggest TV, and they're already arranging plastic chairs in your parlour.", [
+    { label: "Open the doors", tone: "kind", traits: { people: 2 }, outcomes: [{ text: "Thirty people, one TV, one goal in the last minute. The whole street hears your parlour scream.", rep: 3 }] },
+    { label: "Put the TV outside for everyone", tone: "bold", traits: { people: 2, daring: 1 }, outcomes: [{ chance: 0.7, text: "A street cinema! Suya sellers arrive. It's a festival.", rep: 3 }, { chance: 0.3, text: "Rain at half-time. You and four men carry the TV in like a coffin.", rep: 2 }] },
+    { label: "Lock the door and watch alone", tone: "calm", traits: { people: -2 }, outcomes: [{ text: "Perfect view, perfect quiet. And, through the door, thirty disappointed people.", rep: -1 }] },
+  ]),
+  thing(["air_conditioner"], "ac_visitors", ["home"], "❄️", "Suddenly so many visitors", "It's the hottest week of the year, and the children of the compound have discovered your air conditioner. Six of them are \"visiting\" your parlour, very politely, doing nothing at all except breathing cold air.", [
+    { label: "Let them stay and do homework", tone: "kind", traits: { people: 2, giving: 1 }, outcomes: [{ text: "Your parlour becomes the coolest homework club in Lagos. The parents bring you food every week.", rep: 3 }] },
+    { label: "One hour, then home", tone: "calm", outcomes: [{ text: "They agree to the hour. They argue about the minutes.", rep: 1 }] },
+    { label: "Send them home", tone: "calm", traits: { people: -2 }, outcomes: [{ text: "Six sad faces go back out into the heat." }] },
+  ]),
 ];

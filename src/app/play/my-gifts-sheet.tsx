@@ -1,5 +1,6 @@
 "use client";
 
+import { PersonLink } from "./people/open-person";
 import { cash } from "@/lib/world/value";
 import { useCallback, useEffect, useState } from "react";
 import { Ban, Check, Coins, Gift, Handshake, Heart, LoaderCircle, Star, X } from "lucide-react";
@@ -156,7 +157,10 @@ export function MyGiftsSheet({
                         </span>
                       </span>
                       <p className="min-w-0 flex-1 text-sm leading-tight">
-                        <b>{g.name}</b> {what(g)}
+                        <PersonLink id={g.from} className="inline font-bold">
+                          {g.name}
+                        </PersonLink>{" "}
+                        {what(g)}
                         {g.note && <span className="block truncate text-xs italic text-ink/70">&ldquo;{g.note}&rdquo;</span>}
                         <span className="block text-[11px] text-muted">{when(g.at, now)}</span>
                       </p>
@@ -222,7 +226,9 @@ export function MyGiftsSheet({
                 {gifts.blocked.map((p) => (
                   <li key={p.id} className="flex items-center gap-2.5 rounded-xl px-1 py-1">
                     <AvatarFace avatar={p.avatar} size={30} className="shrink-0 rounded-full opacity-60 grayscale" />
-                    <b className="min-w-0 flex-1 truncate text-sm">{p.name}</b>
+                    <PersonLink id={p.id} className="flex-1">
+                      <b className="block truncate text-sm">{p.name}</b>
+                    </PersonLink>
                     <button
                       onClick={() => void block(p.id, false)}
                       disabled={busy !== null}

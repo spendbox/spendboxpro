@@ -61,6 +61,8 @@ export type Theme =
   | "mosque"
   // a law court's courtroom: the judge's bench, the witness box, the dock, the public gallery
   | "courtroom"
+  // a shooting range: six lanes, booths, paper targets, the lobby with the gun counter
+  | "range"
   // sports venues: the stands round a football pitch, an indoor basketball court, a boxing
   // ring and a wrestling ring (seats facing the action, a big screen)
   | "stands"
@@ -77,6 +79,8 @@ export type Theme =
   | "rigDeck"
   // open air at street level
   | "park"
+  // a park you go into: a whole amusement park (rides, stalls, crowds) inside a ring of trees
+  | "amusement"
   | "plaza"
   | "woods"
   | "pond"
@@ -138,6 +142,7 @@ export const ROOM_LABEL: Partial<Record<Tile["kind"], string>> = {
   fire: "Fire station",
   bank: "Bank",
   lawcourt: "Law court",
+  range: "Shooting range",
   club: "Nightclub",
   restaurant: "Restaurant",
   school: "School",
@@ -382,6 +387,9 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("g", "Courtroom", "interior", "courtroom", x, 0.08, z - 0.1, 0.32, 0.22, { weight: 1.3 });
       if (t.v === 1) R("f1", floorLabel(1, "Judges' chambers"), "interior", "office", x, 0.08 + STOREY + 0.05, z - 0.1, 0.32, 0.22, { weight: 0.5 });
       break;
+    case "range":
+      R("g", "Shooting range", "interior", "range", x, 0.08, z - 0.04, 0.34, 0.3, { weight: 1.2 });
+      break;
     case "club":
       R("g", t.name ?? "Dance floor", "interior", "club", x, 0.08, z, 0.36, 0.3, { weight: 1.6 });
       if (t.v === 1) R("f1", floorLabel(1, "VIP lounge"), "interior", "lounge", x, 0.08 + STOREY + 0.05, z, 0.36, 0.3);
@@ -402,7 +410,7 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("o", "At the wheel", "outdoor", "ferris", x + 0.3, 0.08, z - 0.3, 0.1, 0.1);
       break;
     case "park":
-      R("o", "In the park", "outdoor", "park", x, 0.08, z, 0.1, 0.1);
+      R("o", "In the park", "outdoor", "amusement", x, 0.08, z, 0.1, 0.1);
       break;
     case "plaza":
       R("o", "On the plaza", "outdoor", "plaza", x + 0.28, 0.1, z + 0.28, 0.08, 0.08);
@@ -583,7 +591,7 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R("f1", "The vault", "interior", "vault", X, 0.21, Z - 0.9, 0.6, 0.2, { weight: 0.7 });
       break;
     case "bigpark":
-      R("o", "In the park", "outdoor", "park", X, 0.09, Z + 0.3, 0.1, 0.1, { weight: 1.6 });
+      R("o", "In the park", "outdoor", "amusement", X, 0.09, Z + 0.3, 0.1, 0.1, { weight: 1.6 });
       break;
     case "gym":
       R("g", "Gym floor", "interior", "gym", X, 0.09, Z - 0.4, 1.1, 0.65, { weight: 1.4 });

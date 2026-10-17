@@ -35,8 +35,10 @@ import { TurnTable, type Seat } from "../minigames/turn-table";
 import { Confetti } from "../activities/ui";
 import { playSfx } from "../sound";
 import { Sheet } from "../sheet";
+import { onMapNews, tellMap } from "../map-news";
 import { whileHere } from "../activity";
-import { challengeQuote, declineChallenge, inviteChallenge, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
+import { PlaySheet } from "./play-sheet";
+import { challengeQuote, declineChallenge, hostGame, inviteChallenge, queueNext, joinChallenge, leaveChallenge, myChallengeRep, openChallenge, reportWinner, type ChallengeQuote, type ChallengeView } from "./challenge-actions";
 import { createClient } from "@/lib/supabase/client";
 import dynamic from "next/dynamic";
 import { GameInvite, InviteCard, type GameTarget } from "./whot-invite";
@@ -45,7 +47,9 @@ import { GameInvite, InviteCard, type GameTarget } from "./whot-invite";
 const WhotTable = dynamic(() => import("../games/whot-table").then((m) => m.WhotTable), { ssr: false });
 const TruthDareTable = dynamic(() => import("../games/truth-dare-table").then((m) => m.TruthDareTable), { ssr: false });
 const ImpostorTable = dynamic(() => import("../games/impostor-table").then((m) => m.ImpostorTable), { ssr: false });
-const TABLES = { whot: WhotTable, truth_dare: TruthDareTable, impostor: ImpostorTable };
+const BoardTable = dynamic(() => import("../games/board-table").then((m) => m.BoardTable), { ssr: false });
+const PaintballTable = dynamic(() => import("../games/paintball-table").then((m) => m.PaintballTable), { ssr: false });
+const TABLES = { whot: WhotTable, chess: BoardTable, draughts: BoardTable, paintball: PaintballTable, truth_dare: TruthDareTable, impostor: ImpostorTable };
 import { useChallengeChannel } from "./channel";
 import { CallBar } from "../call/call-bar";
 
@@ -72,11 +76,16 @@ export function Fight({
   onLights,
   onMessage,
   onFly,
+  playOpen = false,
+  onPlayClose,
 }: {
   region: string;
   me: Me | null;
   open: boolean;
   onClose: () => void;
+  /** Play (the button beside Events): host one of the table games now, or join, watch, get in line. */
+  playOpen?: boolean;
+  onPlayClose?: () => void;
   /** Where you are on the map now (where the challenge is set). */
   where: () => { x: number; z: number } | null;
   onLights: (lights: ChallengeLight[]) => void;
@@ -126,13 +135,16 @@ export function Fight({
   useEffect(() => {
     if (!signedIn) return;
     const first = setTimeout(() => void look(), 1200);
-    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away.
-    const stop = whileHere(() => void look(), open ? 6000 : 30_000);
+    // Every 6 s while the list is open, every 30 s on the map; nothing while they're away. And
+    // within seconds when someone in the city opens, starts or calls off a game (../map-news).
+    const stop = whileHere(() => void look(), open || playOpen ? 6000 : 30_000);
+    const stopNews = onMapNews(region, "games", () => void look());
     return () => {
       clearTimeout(first);
       stop();
+      stopNews();
     };
-  }, [signedIn, look, open]);
+  }, [signedIn, look, open, playOpen, region]);
   // A knock from someone who just challenged you (a live nudge to look now; the invitation itself
   // comes from the server, so a knock can't be faked into anything).
   const meId = me?.id ?? null;
@@ -171,6 +183,7 @@ export function Fight({
     if (!r.ok) return r.error;
     playSfx("start");
     knock(target);
+    tellMap(region, "games");
     closedRef.current = closedRef.current.filter((x) => x !== r.id);
     setWatchId(null);
     setMine(r.id);
@@ -206,6 +219,8 @@ export function Fight({
   useEffect(() => {
     if (shownId === null) return setView(null);
     let live = true;
+    // Its lights changed (it started, ended or was called off): the city's maps are told.
+    let status = "";
     const get = async () => {
       const v = await fetch(`/api/challenges?id=${shownId}`, { cache: "no-store" })
         .then((res) => (res.ok ? (res.json() as Promise<{ view: ChallengeView | null }>) : null))
@@ -213,6 +228,8 @@ export function Fight({
         .catch(() => null);
       if (!live) return;
       setView(v);
+      if (v && status && v.status !== status) tellMap(region, "games");
+      if (v) status = v.status;
       if (v && (v.status === "cancelled" || v.status === "done")) {
         // Over: no need to keep asking.
         clearInterval(t);
@@ -225,7 +242,7 @@ export function Fight({
       live = false;
       clearInterval(t);
     };
-  }, [shownId, look]);
+  }, [shownId, look, region]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(t);
@@ -237,6 +254,7 @@ export function Fight({
     setBusy(false);
     if (!r.ok) return onMessage(r.error, false);
     playSfx("start");
+    tellMap(region, "games");
     setWatchId(null);
     setMine(c.id);
     onFly?.(c.x, c.z);
@@ -247,6 +265,7 @@ export function Fight({
     setBusy(false);
     if (!r.ok) return onMessage(r.error, false);
     knock(c.host);
+    tellMap(region, "games");
     setInvites((l) => l.filter((x) => x.id !== c.id));
   };
   // Table games being played nearby that you could watch (not yours, not dismissed).
@@ -272,6 +291,7 @@ export function Fight({
             // Errors show in the Challenge card itself (not behind it).
             if (!r.ok) return { error: r.error, busyId: "busyId" in r ? r.busyId : undefined };
             playSfx("start");
+            tellMap(region, "games");
             onClose();
             setMine(r.id);
             onMessage(r.fee > 0 ? `Challenge on! ${cash(r.fee)} fee paid. Everyone nearby has a minute to join.` : "Challenge on! Everyone nearby has a minute to join.", true);
@@ -282,6 +302,56 @@ export function Fight({
             onClose();
             closedRef.current = closedRef.current.filter((x) => x !== id);
             setMine(id);
+          }}
+        />
+      )}
+      {playOpen && me && (
+        <PlaySheet
+          region={region}
+          meId={me.id}
+          list={list}
+          mine={mine}
+          now={now}
+          onClose={() => onPlayClose?.()}
+          onHost={async (game, stake) => {
+            const at = where();
+            if (!at) return "Find a home or walk somewhere on the map first.";
+            const r = await hostGame(game, stake, at.x, at.z, region).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+            if (!r.ok) return r.error;
+            playSfx("start");
+            tellMap(region, "games");
+            onPlayClose?.();
+            closedRef.current = closedRef.current.filter((x) => x !== r.id);
+            setWatchId(null);
+            setMine(r.id);
+            onMessage(`You're hosting ${challengeGame(game)?.title}! Everyone nearby has been told.${r.fee > 0 ? ` ${cash(r.fee)} hosting fee paid.` : ""}`, true);
+            void look();
+            return null;
+          }}
+          onJoin={(c) => {
+            onPlayClose?.();
+            void join(c);
+          }}
+          onWatch={(c) => {
+            onPlayClose?.();
+            setDismissed((d) => [...d, -c.id]);
+            setWatchId(c.id);
+          }}
+          onQueue={async (c, on) => {
+            const r = await queueNext(c.id, on).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+            if (!r.ok) return r.error;
+            if (on) onMessage(`You're in line for the next ${challengeGame(c.game)?.title}. You'll be told first when it's hosted.`, true);
+            void look();
+            return null;
+          }}
+          onOpenMine={(id) => {
+            onPlayClose?.();
+            closedRef.current = closedRef.current.filter((x) => x !== id);
+            setMine(id);
+          }}
+          onFly={(x, z) => {
+            onPlayClose?.();
+            onFly?.(x, z);
           }}
         />
       )}
@@ -299,7 +369,7 @@ export function Fight({
                 </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">
-                    {c.invited ? `${host?.name ?? "Someone"} vs ${c.invited.name}: ${g?.title}! Hop in` : `${host?.name ?? "Someone"} challenged everyone to ${g?.title}!`}
+                    {c.invited ? `${host?.name ?? "Someone"} vs ${c.invited.name}: ${g?.title}! Hop in` : `${host?.name ?? "Someone"} is hosting ${g?.title}!`}
                   </p>
                   <p className="text-xs text-white/70">
                     Pool {cash(c.pool)} · {c.players.length}/{c.seats} · <b className="tabular-nums text-gold">{mmss(left)}</b>
@@ -374,6 +444,8 @@ export function Fight({
             setMine(null);
             setWatchId(null);
             setView(null);
+            // Leaving an open game calls it off: its light goes now, here and on every map.
+            tellMap(region, "games");
             void look();
           }}
           onJoin={() => void join(view)}
@@ -393,6 +465,7 @@ export function Fight({
             closedRef.current = [...closedRef.current, view.id];
             setMine(null);
             setView(null);
+            tellMap(region, "games");
             void look();
           }}
           onMessage={onMessage}
@@ -618,7 +691,8 @@ function FightSheet({
           </p>
         )}
       </div>
-      <div className="mt-2 grid grid-cols-5 gap-1.5">
+      {/* Roomy: "No stake" across the top, the amounts two a row below. */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {STAKES_NAIRA.map((s) => {
           const mint = s / perMint;
           const cant = canSpend !== null && Math.round(mint * 100) / 100 + fee > canSpend + 0.001;
@@ -626,7 +700,7 @@ function FightSheet({
             <button
               key={s}
               onClick={() => setChip(s)}
-              className={cn("h-10 min-w-0 truncate rounded-full px-1 text-[13px] font-bold transition", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
+              className={cn("h-12 min-w-0 rounded-2xl px-3 text-base font-bold tabular-nums transition", s === 0 && "col-span-2", chip === s ? "bg-ink text-white shadow" : "bg-ink/5", cant && chip !== s && "text-muted line-through decoration-1")}
             >
               {s === 0 ? "No stake" : cash(mint)}
             </button>

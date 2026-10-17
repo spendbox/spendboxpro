@@ -2,8 +2,9 @@
 
 import { naira } from "@/lib/brand";
 import { currentUserId } from "@/lib/game";
-import { clubEntryMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { clubEntryMint, gameFeeMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MINIGAME_BY_ID } from "./minigames/registry";
 
 // Paying to go places: the first visit to a place in each town, and train fares (every time).
 // The database (game-db/035_fees_and_jobs.sql) takes the mint and puts a share in the prize pool.
@@ -58,7 +59,8 @@ export async function payRide(kind: string, index: number): Promise<FeePaid | Fa
   if (error) {
     // Rides are never free: before part 61 is run they're switched off, and you need a life first.
     if (/life_ride/.test(error.message)) return { ok: false, error: "Rides are switched on soon.", kick: true };
-    if (error.message.startsWith("no_life")) return { ok: false, error: "Start your life in the city first.", kick: true };
+    // The hourly towns (no life in the city): nothing to pay from, and nothing paid out either.
+    if (error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0 };
     return say(error.message);
   }
   const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
@@ -94,4 +96,28 @@ export async function myVisits(): Promise<string[]> {
   const { data, error } = await createAdminClient().rpc("my_visits", { p_user: userId });
   if (error) return [];
   return Array.isArray(data) ? data.map(String) : [];
+}
+
+/** Games that aren't in the 100 (paintball, a card table's games). */
+const EXTRA_GAMES = new Set(["paintball", "cards", "dice"]);
+
+/**
+ * Pay for a go at a game (the game's own price, never the browser's), from your Fun money, then
+ * savings, then essentials. Games never pay out. off: the database part isn't run yet, so the
+ * game is free until it is.
+ */
+export async function payToPlay(game: string): Promise<(FeePaid & { off?: boolean }) | Fail> {
+  if (!EXTRA_GAMES.has(game) && !MINIGAME_BY_ID.has(game)) return { ok: false, error: "Unknown game." };
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Sign in to play: each game costs a small fee.", kick: true };
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("life_play_game", { p_user: userId, p_game: game, p_fee: gameFeeMint(game) });
+  if (error) {
+    if (/life_play_game/.test(error.message)) return { ok: true, paid: 0, coins: 0, off: true };
+    // The hourly towns (no life in the city): nothing to pay from, and nothing paid out either.
+    if (error.message.startsWith("no_life")) return { ok: true, paid: 0, coins: 0 };
+    return say(error.message);
+  }
+  const { data: me } = await db.from("profiles").select("coins").eq("id", userId).maybeSingle();
+  return { ok: true, paid: n(data), coins: n(me?.coins) };
 }

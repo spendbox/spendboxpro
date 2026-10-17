@@ -60,6 +60,7 @@ import { PartyRoom } from "./party-room";
 import { RoomGuard, shrinkPhoto } from "./room-kit";
 import { StageRoom } from "./stage-room";
 import { HostGuide } from "./host-guide";
+import { onMapNews, tellMap } from "../map-news";
 import { whileHere } from "../activity";
 import { onLatest } from "../pulse";
 import type { PartyZone } from "../city/party-lights";
@@ -168,12 +169,15 @@ export function Events({
       }
     });
     const every = whileHere(() => void look(), busy ? 20_000 : 5 * 60_000);
+    // Within seconds when someone in the city hosts, calls off or ends one (../map-news).
+    const stopNews = onMapNews(region, "events", () => void look());
     return () => {
       clearTimeout(first);
       stopLatest();
       every();
+      stopNews();
     };
-  }, [signedIn, look, busy]);
+  }, [signedIn, look, busy, region]);
   useEffect(() => {
     if (open) void look();
   }, [open, look]);
@@ -405,6 +409,8 @@ export function Events({
                 setConfirm(null);
                 const r = await (c.kind === "end" ? endEvent(c.e.id) : cancelEvent(c.e.id)).catch(() => fail());
                 if (!r.ok) return onMessage(r.error, false);
+                setList((l) => l.filter((x) => x.id !== c.e.id));
+                tellMap(region, "events");
                 if (inside?.id === c.e.id) setInside(null);
                 setDetail(null);
                 onMessage(c.kind === "end" ? "It's over. Thanks for hosting!" : c.e.price > 0 ? "Called off. Every ticket has been paid back, and everyone has been told." : "Called off. Everyone has been told.", true);
@@ -1240,6 +1246,7 @@ function HostForm({
                   setGoing(false);
                   return setProblem(r.error);
                 }
+                tellMap(region, "events");
                 // What's on its stage, ready for when it starts: the songs (parties), or the slides or
                 // video (talks).
                 const ready = await loadStage(r.id).catch(() => null);

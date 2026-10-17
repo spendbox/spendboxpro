@@ -34,8 +34,8 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
   { id: "whot", title: "Whot!", category: "cards", engine: "whot", seats: 4, colour: "#7a1f2b", icon: "🃏", blurb: "Nigeria's card game. Match the shape or number, hold on, pick two, general market.", tags: "naija shapes" },
   { id: "ludo", title: "Ludo", category: "board", engine: "ludo", seats: 4, colour: "#e03131", icon: "🎲", blurb: "Roll, race your four seeds home, and knock everyone else back to start.", tags: "dice race" },
   { id: "ayo", title: "Ayò", category: "board", engine: null, seats: 2, colour: "#a5673f", icon: "🫘", blurb: "The Yoruba seed game. Sow round the board and capture your rival's seeds.", tags: "oware mancala seeds" },
-  { id: "draughts", title: "Draughts", category: "board", engine: null, seats: 2, colour: "#343a40", icon: "⚫", blurb: "Jump your rival's pieces, crown your kings, clear the board.", tags: "checkers" },
-  { id: "chess", title: "Chess", category: "board", engine: null, seats: 2, colour: "#495057", icon: "♟️", blurb: "The classic. Quick games, checkmate to win." },
+  { id: "draughts", title: "Draughts", category: "board", engine: "draughts", seats: 2, colour: "#343a40", icon: "⚫", blurb: "Jump your rival's pieces, crown your kings, clear the board.", tags: "checkers" },
+  { id: "chess", title: "Chess", category: "board", engine: "chess", seats: 2, colour: "#495057", icon: "♟️", blurb: "The classic. Quick games, checkmate to win." },
   { id: "snakes", title: "Snakes and Ladders", category: "board", engine: null, seats: 4, colour: "#2f9e44", icon: "🐍", blurb: "Climb the ladders, dodge the snakes, first to 100 wins.", tags: "dice" },
   { id: "dominoes", title: "Dominoes", category: "board", engine: null, seats: 4, colour: "#212529", icon: "🔳", blurb: "Match the ends, block your rivals, empty your hand first.", tags: "domino" },
   { id: "crazy_eights", title: "Crazy Eights", category: "cards", engine: null, seats: 4, colour: "#c2255c", icon: "🎴", blurb: "Match the suit or number; eights are wild. First out wins.", tags: "eights" },
@@ -44,6 +44,7 @@ export const CHALLENGE_GAMES: ChallengeGame[] = [
   { id: "impostor", title: "Impostor", category: "party", engine: "impostor", seats: 6, colour: "#ef4444", icon: "🕵️", blurb: "Everyone knows the secret word but one. Give clues, find the faker, vote them out. 3 to 6 players.", tags: "spy chameleon word imposter" },
   { id: "jenga", title: "Jenga", category: "party", engine: null, seats: 4, colour: "#a5673f", icon: "🧱", blurb: "Pull a block, stack it on top, and don't be the one who topples the tower.", tags: "tower blocks" },
   { id: "police_thief", title: "Police and Thief", category: "party", engine: null, seats: 6, colour: "#1c3f6e", icon: "🚓", blurb: "One thief, the rest police, round the streets of Lagos. Catch them or get away.", tags: "chase" },
+  { id: "paintball", title: "Paintball", category: "sports", engine: "paintball", seats: 6, colour: "#e03131", icon: "🎯", blurb: "Red against blue in 3D, bots fill the empty places. First team to 25 splats wins.", tags: "shooter team splat" },
   { id: "penalties", title: "Penalty Shoot-out", category: "sports", engine: null, seats: 2, colour: "#2b8a3e", icon: "⚽", blurb: "Five kicks each. Pick your corner, beat the keeper.", tags: "football soccer" },
   { id: "table_tennis", title: "Table Tennis", category: "sports", engine: null, seats: 2, colour: "#e8590c", icon: "🏓", blurb: "Quick rallies, first to eleven.", tags: "ping pong" },
 ];
@@ -54,7 +55,7 @@ export const challengeGame = (id: string) => CHALLENGE_GAMES.find((g) => g.id ==
  * The games with their own full-screen table (docs/GAME_TABLES.md, docs/PARTY_GAMES.md): the ones
  * you can challenge one person to, from their card or a private chat.
  */
-export const TABLE_GAMES = ["whot", "truth_dare", "impostor"] as const;
+export const TABLE_GAMES = ["whot", "chess", "draughts", "paintball", "truth_dare", "impostor"] as const;
 export type TableGame = (typeof TABLE_GAMES)[number];
 export const isTableGame = (id: string): id is TableGame => (TABLE_GAMES as readonly string[]).includes(id);
 /** Fewest players a game can be played with (Impostor needs three: with two, each knows who it is). */
@@ -114,6 +115,17 @@ export const CHALLENGE_FEE_NAIRA = 50_000;
 export const CHALLENGE_COOLDOWN_SECS = 8 * 60;
 /** How long people have to join. */
 export const JOIN_SECS = 60;
+
+/**
+ * Play: hosting a game right where you are (game-db/122 challenge_host). Always costs a fee:
+ * ₦20,000 for a two-player game (chess, draughts), ₦100,000 for one with more players.
+ */
+export const HOST_FEE_NAIRA = { two: 20_000, more: 100_000 } as const;
+export const hostFeeNaira = (id: string) => ((CHALLENGE_GAMES.find((g) => g.id === id)?.seats ?? 2) > 2 ? HOST_FEE_NAIRA.more : HOST_FEE_NAIRA.two);
+/** How long others have to join a hosted game (time to come over, or to hear about it). */
+export const HOST_JOIN_SECS = 180;
+/** The games you can host from Play (the full-screen tables; more to come). */
+export const PLAY_GAMES: readonly TableGame[] = TABLE_GAMES;
 /** The winner takes this share of the pool (the rest is the house's). */
 export const WINNER_SHARE = 0.9;
 /** Challenges near enough to hear about (tiles, 100 m each). */

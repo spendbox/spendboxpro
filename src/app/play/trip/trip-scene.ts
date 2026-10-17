@@ -89,8 +89,11 @@ export function createTripScene(
   const sky = buildSky(look, disposers);
   scene.add(sky.group);
 
-  // The road: two turns for a ride; a straight pavement on foot.
-  const route = walking ? makeRoute([{ straight: 240 }]) : makeRoute([{ straight: 58 }, { turn: "left", r: 9 }, { straight: 60 }, { turn: "right", r: 9 }, { straight: 150 }]);
+  // The road: two junctions for a ride, each one left, right or straight on (a different way
+  // every trip); a straight pavement on foot.
+  const ways = ["left", "right", "straight"] as const;
+  const way = () => ways[Math.floor(Math.random() * ways.length)];
+  const route = walking ? makeRoute([{ straight: 240 }]) : makeRoute([{ straight: 58 }, { turn: way(), r: 9 }, { straight: 60 }, { turn: way(), r: 9 }, { straight: 150 }]);
   const B = route.lines[Math.min(1, route.lines.length - 1)];
   const C = route.lines[route.lines.length - 1];
   const boardS = walking ? 76 : 40;
@@ -188,6 +191,7 @@ export function createTripScene(
     if (!ride) return WALK_SPEED;
     let vm = ride.cruise;
     for (const t of route.turns) {
+      if (t.dir === 0) continue;
       if (sAt >= t.s0 - 0.5 && sAt <= t.s1) vm = Math.min(vm, ride.turn);
       else if (sAt < t.s0) vm = Math.min(vm, Math.sqrt(ride.turn ** 2 + 2 * DECEL * (t.s0 - sAt)));
     }
@@ -264,7 +268,7 @@ export function createTripScene(
       for (const w of veh.wheels) w.rotation.z -= (v * real) / Math.max(0.1, w.scale.x);
       const bounce = v > 1 ? Math.abs(Math.sin(now / 1000 * 9)) * 0.02 * Math.min(1, v / 10) : 0;
       veh.body.position.y = bounce;
-      const turning = route.turns.find((t) => s > t.s0 && s < t.s1);
+      const turning = route.turns.find((t) => t.dir !== 0 && s > t.s0 && s < t.s1);
       const flat = stage?.flat && (phase === "event" || (phase === "outro" && tPhase < 1.5)) ? 0.06 : 0;
       veh.body.rotation.x += ((turning ? -turning.dir * Math.min(0.05, (v * v) / turning.r / 200) : 0) + flat - veh.body.rotation.x) * k(5);
       veh.body.rotation.z += (-(flat ? 0.025 : 0) - veh.body.rotation.z) * k(5);

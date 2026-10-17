@@ -247,3 +247,11 @@ and Back changes anything.
   src/app/play/activities/synth.ts `backgroundAudio`), except on iPhones and iPads, where that way
   of playing can go silent. YouTube songs and videos can't: YouTube stops them when the browser
   isn't in front.
+
+## Lights on the map, live
+A game's or event's light on the map goes as soon as it's called off (and changes when it starts
+or moves): whoever opens, starts, calls off or ends one nudges everyone in the city over a small
+live channel (`src/app/play/map-news.ts`, "map:<region>"), and each phone looks again within a
+few seconds. A nudge carries nothing but "games" or "events" (a fake one costs one more look). The
+minute's ping also notices an event moved to another time (`/api/active` fingerprints the start
+times too).

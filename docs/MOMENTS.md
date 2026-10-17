@@ -16,7 +16,10 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 - Going into a place makes one more likely soon after (one that fits there: a wrong bill in a
   restaurant, a plank challenge at the gym, the offering basket at church).
 - Never while a card or a full-screen tool is open, while you're taking a photo or on a ride, or
-  while the game isn't on screen. It waits and tries again.
+  while the game isn't on screen. Only while you're really playing: you touched the screen (or a
+  key) in the last two minutes. It waits and tries again.
+- A card you leave goes by itself: when you put the phone down or switch apps, and after 28
+  minutes on screen (just before the server lets it go), so you never tap one that's passed.
 - Street moments at least 10 minutes after any moment; road moments at least 5 minutes after the
   last road moment (game-db/119). At most 40 a day, street and road together (the server keeps to
   this). A big one (`size: "big"`) at most every 3 days.
@@ -37,8 +40,10 @@ careers, other players in your story): `docs/LIFE_WHEEL.md`.
 | Offices and other places | A colleague's loan, praise from the boss, the office birthday collection |
 | Anywhere | A scam call, a friend who wants to borrow, money in an old pocket, and a fan who recognises you (level 5 and up) |
 
-There are 64 moments for these places, 7 of which only come back as follow-ups, and 55 more on the
-road, acted out in the trip film (docs/TRIPS.md). Each is told one of a few
+There are 64 moments for these places, 7 of which only come back as follow-ups, and 69 more on the
+road, acted out in the trip film (docs/TRIPS.md). With the big ones, the cast, business, other
+players, the 26 built from parts, the calendar, your area and your things, that's 368 moments and
+about 8,900 versions in all. Each is told one of a few
 ways, with a name, an amount and the place filled in, so the same one rarely reads the same. The
 25 you had last don't come again until you've had others, and ones you've never had are three
 times as likely. Rare ones (`rarity`) come about monthly, legendary ones about yearly.
@@ -179,7 +184,7 @@ follow-ups exist, and that every kind of place has moments by day and by night.
 | Businesses: the kinds, the stages, a day of business | `src/lib/world/ventures.ts` |
 | Business moments | `src/lib/world/venture-moments.ts` |
 | Moments with other players | `src/lib/world/player-moments.ts`, `src/app/play/stories-server.ts` |
-| Moments built from parts | `src/lib/world/template-moments.ts`, `template-moments-2.ts` |
+| Moments built from parts | `src/lib/world/template-moments.ts`, `template-moments-2.ts`, `template-moments-3.ts` |
 | Your things in your story | `src/lib/world/thing-moments.ts`, `thing-answers.ts` |
 | The Lagos calendar, and its moments | `src/lib/world/calendar.ts`, `season-moments.ts` |
 | Moments for your area and who you are | `src/lib/world/local-moments.ts` |

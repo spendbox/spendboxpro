@@ -12,7 +12,7 @@ import { Sheet } from "../sheet";
 import { challengeQuote, type ChallengeQuote } from "./challenge-actions";
 
 // Challenge one player to a game at a table (docs/GAME_TABLES.md, docs/PARTY_GAMES.md): Whot!,
-// Truth or Dare or Impostor. Pick the game and a stake, send the challenge. They're asked to
+// chess, draughts, paintball, Truth or Dare or Impostor. Pick the game and a stake, send the challenge. They're asked to
 // accept; the table opens straight away for you.
 
 export type GameTarget = { id: string; name: string; avatar: unknown };
@@ -27,6 +27,27 @@ const LOOKS: Record<TableGame, { bg: string; ring: string; button: string; left:
     left: <span className="grid h-16 w-12 -rotate-12 place-items-center rounded-xl bg-gradient-to-br from-[#22d3ee] to-[#1d4ed8] text-[10px] font-black uppercase shadow-lg ring-2 ring-white/70">Truth</span>,
     right: <span className="grid h-16 w-12 rotate-12 place-items-center rounded-xl bg-gradient-to-br from-[#ff2d95] to-[#7c3aed] text-[10px] font-black uppercase shadow-lg ring-2 ring-white/70">Dare</span>,
   },
+  chess: {
+    bg: "radial-gradient(ellipse at 50% 30%, #6b4426, #2a170b)",
+    ring: "#f2e8d5",
+    button: "#495057",
+    left: <span className="-rotate-12 text-5xl drop-shadow-[0_3px_4px_rgba(0,0,0,.6)]">♔</span>,
+    right: <span className="rotate-12 text-5xl text-black drop-shadow-[0_2px_3px_rgba(255,255,255,.35)]">♛</span>,
+  },
+  draughts: {
+    bg: "radial-gradient(ellipse at 50% 30%, #3b6b46, #12261a)",
+    ring: "#f2c14e",
+    button: "#343a40",
+    left: <span className="size-12 -rotate-12 rounded-full border-4 border-[#7f1d1d] bg-[#b3261e] shadow-lg" />,
+    right: <span className="grid size-12 rotate-12 place-items-center rounded-full border-4 border-black bg-[#1b1716] text-lg shadow-lg">👑</span>,
+  },
+  paintball: {
+    bg: "radial-gradient(ellipse at 20% 20%, rgba(224,49,49,.7), transparent 55%), radial-gradient(ellipse at 80% 80%, rgba(28,126,214,.7), transparent 55%), #0d1117",
+    ring: "#ffd43b",
+    button: "#e03131",
+    left: <span className="size-11 -rotate-12 rounded-[40%_60%_55%_45%] bg-[#ff4d4d] shadow-lg" />,
+    right: <span className="size-11 rotate-12 rounded-[55%_45%_40%_60%] bg-[#339af0] shadow-lg" />,
+  },
   impostor: {
     bg: "radial-gradient(ellipse at 50% 0%, #1e2a44, #050810)",
     ring: "#ef4444",
@@ -35,6 +56,8 @@ const LOOKS: Record<TableGame, { bg: string; ring: string; button: string; left:
     right: <span className="rotate-12 rounded-lg bg-[#d6c7a1] px-1.5 py-1 font-mono text-[10px] font-black text-[#1c1917] shadow">TOP SECRET</span>,
   },
 };
+/** The same looks for the Play sheet (./play-sheet). */
+export const GAME_LOOKS = LOOKS;
 const lookOf = (game: string) => LOOKS[(TABLE_GAMES as readonly string[]).includes(game) ? (game as TableGame) : "whot"];
 
 export function GameInvite({ region, target, game, onGame, onClose, onSend }: { region: string; target: GameTarget; game: TableGame; onGame: (g: TableGame) => void; onClose: () => void; onSend: (stakeMint: number) => Promise<string | null> }) {
@@ -94,13 +117,14 @@ export function GameInvite({ region, target, game, onGame, onClose, onSend }: { 
         <p className="-mt-2 text-center text-xs text-muted">{g?.blurb}</p>
         <div>
           <p className="text-sm font-semibold">Stake (optional: each of you puts in)</p>
-          <div className="mt-2 grid grid-cols-5 gap-1.5">
+          {/* Roomy: "None" across the top, the amounts two a row below. */}
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {quote &&
               STAKES_NAIRA.map((nv) => {
                 const m = Math.round((nv / quote.perMint) * 100) / 100;
                 const on = !typed && stake === m;
                 return (
-                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-11 min-w-0 truncate rounded-xl px-1 text-sm font-bold", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
+                  <button key={nv} onClick={() => (setTyped(""), setStake(m))} className={cn("h-12 min-w-0 rounded-2xl px-3 text-base font-bold tabular-nums", nv === 0 && "col-span-2", on ? "bg-gold text-ink" : "bg-panel-2 text-muted")}>
                     {nv === 0 ? "None" : cash(m)}
                   </button>
                 );

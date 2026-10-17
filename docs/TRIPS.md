@@ -47,24 +47,30 @@ that the film acts out.
    stops, the convoy drives away.
 5. The ride goes on for a couple of seconds, and the film ends.
 
-The 55 road moments are in `src/lib/world/road-moments.ts`. They include:
+The 69 road moments are in `src/lib/world/road-moments.ts` (and four more, built from parts, in
+`template-moments-2.ts` and `template-moments-3.ts`: in the danfo, on the okada, in the keke, at the
+bus stop). They include:
 
 - **Checkpoints:** police wanting "something for the boys", a boot search, the danfo held up, "Where
   your helmet?", a phone search on foot, fake officers, LASTMA and the BRT lane, a seatbelt fine,
   the fire-extinguisher check, the okada task force.
 - **Touts:** agbero tickets, area boys on the bonnet, union levies, the corner boys.
 - **People asking for help:** a mother with a baby at the window, a widow's transport money, a
-  stranded motorist, a student late for an exam, a woman in labour.
+  stranded motorist, a student late for an exam, a woman in labour, a mother of twins singing
+  for luck, a blind man waiting to cross, a bride whose car broke down on the way to church.
 - **Hawkers:** pure water and Gala, "original" chargers, change running after the bus, the
   windscreen boy, a schoolgirl hawking groundnuts.
 - **Trouble with the ride:** a flat tyre and the vulcaniser, "Everybody come down!", pushing the
-  danfo, an overheating engine, a taxi out of fuel, an okada chain.
+  danfo, an overheating engine, a taxi out of fuel, an okada chain, a vulcaniser with four very
+  new nails, a crate of eggs and a pothole.
 - **The road itself:** a go-slow and its shortcut guides and okada offers, a danfo taking your
   mirror, the "road repair" boys with their rope, a muddy splash, goats crossing, school children
-  crossing, a siren convoy, a wedding convoy dancing in the road, a flood, rain.
+  crossing, cows on the expressway, a siren convoy, a politician's convoy throwing rice, a wedding
+  convoy dancing in the road, a burial party with a brass band, a flood, rain under the flyover.
 - **Other things:** a fan, a bag in the road, the bus preacher, "shift small", "I no get change", a
   taxi's long way round, the driver's playlist, a "one chance" feeling, a fight on the road, a
-  thief and the crowd.
+  thief and the crowd, a "Don't you remember me?", rice falling off a truck, two agberos pulling
+  you both ways, an okada clipping your car and his friends arriving, the windscreen boy's exam fee.
 
 The rules:
 

@@ -17,6 +17,7 @@ import type { Block, InteractKind } from "./interact";
 import type { Theme } from "./levels";
 import { fireEngineKit } from "./vehicles";
 import { CELL_M, FURNITURE, SIZES, danceFloorOf, gardenParts, gardenWalls, itemSize, planWalls, roomAt, roomStyle, shapeOf, type HomePlan, type PlanRoom } from "@/lib/home-plan";
+import { BANK_ROBBERY } from "../activities/games";
 
 /** Something to use in a room (its id is made by the city view). */
 export type RoomItem = { kind: InteractKind; label: string; x: number; y: number; z: number; r: number };
@@ -141,6 +142,10 @@ type Room = {
   accentSide?: number;
   /** Curtain fabric for windows, or none. */
   curtains?: number;
+  /** Places against the outside walls that need plain wall, not a window (a TV, the stairs...), metres. */
+  keepClear?: { x: number; z: number; w: number; d: number }[];
+  /** A hole in the ceiling (the stairwell going up), metres. */
+  ceilingHole?: { x: number; z: number; w: number; d: number };
   /** Window frames. */
   frame?: number;
   /** Ceiling height of window heads (from the top). */
@@ -252,7 +257,10 @@ function shell(x: Ctx) {
         k.box(0, 0, 0.008, L, 0.09, 0.02, pal.trim, { noAo: true });
         return;
       }
-      const { open, s, hh } = windowLayout(kind, L, room.h, room.headDrop ?? 0.15);
+      const laid = windowLayout(kind, L, room.h, room.headDrop ?? 0.15);
+      const { s, hh } = laid;
+      // No window (or curtains) behind a TV, the stairs, a wardrobe...: plain wall there.
+      const open = room.keepClear?.length ? laid.open.filter(([a, b]) => !blockedOpening(room, side, a, b)) : laid.open;
       if (s > 0) k.box(0, 0, -T / 2, full, s, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       k.box(0, hh, -T / 2, full, room.h - hh, T, color, { noAo: true, grad: [0.84, 1.04, room.h] });
       let prev = -full / 2;
@@ -291,8 +299,36 @@ function shell(x: Ctx) {
       }
     });
   }
-  // The ceiling.
-  k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
+  // The ceiling (round the stairwell, when the stairs go up through it).
+  const hole = room.ceilingHole;
+  if (!hole) k.box(0, room.h, 0, room.w + 0.6, 0.12, room.d + 0.6, pal.ceiling, { noAo: true });
+  else {
+    const X0 = -room.w / 2 - 0.3, X1 = room.w / 2 + 0.3, Z0 = -room.d / 2 - 0.3, Z1 = room.d / 2 + 0.3;
+    const hx0 = hole.x - hole.w / 2, hx1 = hole.x + hole.w / 2, hz0 = hole.z - hole.d / 2, hz1 = hole.z + hole.d / 2;
+    const slab = (x0: number, x1: number, z0: number, z1: number) => {
+      if (x1 - x0 > 0.01 && z1 - z0 > 0.01) k.box((x0 + x1) / 2, room.h, (z0 + z1) / 2, x1 - x0, 0.12, z1 - z0, pal.ceiling, { noAo: true });
+    };
+    slab(X0, X1, Z0, hz0);
+    slab(X0, X1, hz1, Z1);
+    slab(X0, hx0, hz0, hz1);
+    slab(hx1, X1, hz0, hz1);
+    // The stairwell's sides, up into the floor above.
+    for (const [cx, cz, w, d] of [[hole.x, hz0, hole.w, 0.04], [hole.x, hz1, hole.w, 0.04], [hx0, hole.z, 0.04, hole.d], [hx1, hole.z, 0.04, hole.d]] as const) k.box(cx, room.h, cz, w, 0.5, d, pal.wall, { noAo: true });
+  }
+}
+
+/** Is the window from a to b along this wall behind something that needs plain wall? */
+function blockedOpening(room: Room, side: number, a: number, b: number) {
+  const [, , ry] = onWall(room, side, 0);
+  const ix = Math.sin(ry), iz = Math.cos(ry);
+  for (let u = a - 0.3; u <= b + 0.3; u += 0.2) {
+    const [px, pz] = onWall(room, side, u);
+    for (const dIn of [0.25, 0.6, 1.0]) {
+      const x = px + ix * dIn, z = pz + iz * dIn;
+      if (room.keepClear!.some((r) => Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2)) return true;
+    }
+  }
+  return false;
 }
 
 /** The inside walls with no windows, for pictures and shelves. */
@@ -3541,7 +3577,7 @@ function bankHall(x: Ctx) {
   // The vault door, shut, in the wall behind the tellers (tap it to try robbing the bank).
   atWall(x, 0, W / 2 - 3.5, () => vaultDoor(x, false));
   // (Things only light up within a few steps, so the button stands out on the hall floor.)
-  item(x, "vault", "Rob the vault", W / 2 - 7.5, 0, 0.8, 1.2);
+  if (BANK_ROBBERY) item(x, "vault", "Rob the vault", W / 2 - 7.5, 0, 0.8, 1.2);
   // The bank's name in gold over the counter.
   wallSign(x, 0, -2.5, 3.6, info.name.toUpperCase(), 0x1f3b2c, 0xf2c94c, 6.5, 0.7, true);
   // The queue, a desk with forms, cash machines on a side wall, chandeliers.
@@ -3575,7 +3611,7 @@ function vaultRoom(x: Ctx) {
   const D = room.d;
   // The open vault door in the front wall; the gold is there for the taking (at a price).
   atWall(x, 2, 0, () => vaultDoor(x, true));
-  item(x, "vault", "Rob the vault", 0, 0, 0, 1.4);
+  if (BANK_ROBBERY) item(x, "vault", "Rob the vault", 0, 0, 0, 1.4);
   // Walls of safe-deposit boxes.
   for (const side of [1, 3]) {
     atWall(x, side, 0, () => {
@@ -3892,13 +3928,240 @@ function courtroom(x: Ctx) {
   );
 }
 
+// ---------------------------------------------------------------- a shooting range
+
+const RANGE_PAL: Pal = { wall: 0x4a4f57, accentWall: 0xe8590c, trim: 0x2b2f35, ceiling: 0x2f343b, floor: ["concrete", 0x7b7f86, 0x6c7077], wood: 0x3b3f46, fabric: 0x1f2328, fabric2: 0xe8590c, accent: 0xe8590c, metal: 0x9aa1a8, art: [0xe8590c, 0xf8f9fa, 0x1f2328], frame: 0x2b2f35, leaves: LEAVES, pot: 0x2b2f35 };
+
+/**
+ * An indoor shooting range: six lanes down a long dark hall, a booth for each (partitions, a
+ * shelf, ear defenders on a hook), paper targets hanging at 10, 25 and 50 m on their carriers,
+ * distance lines on the floor, angled baffles across the ceiling, a sloping rubber backstop, and
+ * behind the booths the lobby: the counter, guns on a wall rack, safety signs and benches.
+ */
+function shootingRange(x: Ctx) {
+  const { k, room, pal, info } = x;
+  const W = room.w;
+  const D = room.d;
+  const far = -D / 2;
+  const line = D / 2 - 6.5;
+  const lanes = 6;
+  const lw = (W - 1) / lanes;
+  // The backstop: a dark sloping berm across the far end, lit from above.
+  k.box(0, 0, far + 1.0, W, 1.2, 2.0, 0x23262b);
+  k.box(0, 1.2, far + 0.6, W, 1.6, 1.2, 0x1b1d21, { rx: -0.35 });
+  for (let i = 0; i < 6; i++) k.box(-W / 2 + (i + 0.5) * (W / 6), 3.3, far + 1.5, 0.9, 0.06, 0.25, 0xfff4d6, { layer: "glow" });
+  // Distance lines and numbers on the floor, a yellow firing line.
+  for (const [dz, c] of [[10, 0xf8f9fa], [15, 0xadb5bd], [19, 0xf8f9fa]] as const) {
+    const zz = line - dz;
+    if (zz < far + 2.2) continue;
+    k.box(0, 0.004, zz, W - 1, 0.006, 0.06, c, { noAo: true });
+  }
+  k.box(0, 0.005, line, W - 0.6, 0.008, 0.14, 0xfab005, { noAo: true });
+  // Baffles: angled panels across the ceiling all the way down.
+  for (let zz = line - 1.5; zz > far + 2; zz -= 2.2) k.box(0, room.h - 0.55, zz, W - 0.4, 0.06, 0.9, 0x3a3f46, { rx: 0.45 });
+  // The lanes: partitions, a shelf, a target on its carrier at its own distance.
+  for (let l = 0; l < lanes; l++) {
+    const cx = -W / 2 + 0.5 + (l + 0.5) * lw;
+    // Booth partitions (padded panels) either side, a shelf across the front.
+    for (const sx of [-lw / 2, lw / 2]) k.box(cx + sx, 0, line + 0.75, 0.08, 1.9, 1.5, 0x5a6069);
+    k.box(cx, 0.95, line + 0.1, lw - 0.12, 0.06, 0.45, 0x8a6a4f);
+    k.box(cx, 0, line + 0.1, lw - 0.14, 0.95, 0.06, 0x3b3f46);
+    // A lane number above, and ear defenders hanging on the partition.
+    k.box(cx, 2.2, line + 0.2, 0.4, 0.3, 0.04, [0xe8590c, 0xf8f9fa][l % 2], { noAo: true });
+    k.ball(cx - lw / 2 + 0.15, 1.5, line + 1.0, 0.08, 0x1f2328, { w: 8, h: 6 });
+    // The target carrier: a rail along the ceiling, a hanger, the paper target.
+    const dz = [10, 16, 20, 12, 18, 14][l];
+    const tz = Math.max(far + 2.4, line - dz);
+    k.box(cx, room.h - 0.25, (line + far) / 2, 0.05, 0.05, line - far, 0x6c7077);
+    k.box(cx, room.h - 0.3, tz, 0.3, 0.1, 0.1, 0x2b2f35);
+    k.cyl(cx, 1.6, tz, 0.006, 0.006, room.h - 1.9, 0x9aa1a8, 4);
+    k.box(cx, 1.0, tz, 0.62, 0.86, 0.01, 0xf3efe6, { noAo: true });
+    // Rings and a silhouette, drawn on the paper.
+    k.box(cx, 1.14, tz + 0.007, 0.3, 0.6, 0.004, 0x2b2f35, { noAo: true });
+    k.cyl(cx, 1.62, tz + 0.006, 0.08, 0.08, 0.004, 0x2b2f35, 14, { rx: Math.PI / 2, noAo: true });
+    for (const [r, c] of [[0.13, 0xf3efe6], [0.09, 0xe8590c], [0.04, 0xf3efe6]] as const) k.cyl(cx, 1.3, tz + 0.012, r, r, 0.004, c, 18, { rx: Math.PI / 2, noAo: true });
+    // A shooter at most lanes.
+    if (l !== 2) spot(x, cx, line + 0.55, Math.PI, "stand");
+  }
+  // Lights down the range, red and green lamps over the line.
+  for (let zz = line - 3; zz > far + 3; zz -= 4.5) k.box(0, room.h - 0.08, zz, W - 2, 0.04, 0.2, 0xf4f8ff, { layer: "glow" });
+  for (const [sx, c] of [[-1, 0xff4d4d], [1, 0x40e080]] as const) k.ball(sx * (W / 2 - 0.6), 3.2, line + 0.3, 0.12, c, { layer: "glow" });
+  // The lobby behind the booths: a glass wall, the counter, the gun rack, benches, signs.
+  k.box(0, 0, line + 1.6, W, 0.9, 0.08, 0x3b3f46);
+  k.box(0, 0.9, line + 1.6, W, room.h - 0.9, 0.03, 0xbcd7e8, { layer: "glass" });
+  k.box(0, room.h - 0.12, line + 1.6, W, 0.12, 0.12, pal.trim);
+  const cz = D / 2 - 2.2;
+  k.box(-W / 2 + 3.2, 0, cz, 4.6, 1.05, 0.8, 0x2b2f35);
+  k.box(-W / 2 + 3.2, 1.05, cz, 4.8, 0.05, 0.95, 0xe8590c);
+  k.box(-W / 2 + 2.4, 1.1, cz, 0.6, 0.06, 0.4, 0x1a1b1e);
+  spot(x, -W / 2 + 3.2, cz - 0.9, 0, "stand");
+  // The gun rack on the side wall: rifles and pistols on a pegboard.
+  atWall(x, 3, D / 2 - 3.2, () => {
+    k.box(0, 1.0, 0.03, 3.2, 1.6, 0.05, 0x1f2328, { noAo: true });
+    for (let g = 0; g < 6; g++) {
+      k.box(-1.3 + g * 0.52, 1.75 - (g % 2) * 0.05, 0.08, 0.1, 0.06, 0.03, 0x9aa1a8);
+      k.box(-1.3 + g * 0.52, 1.15, 0.08, 0.05, 1.1, 0.04, g % 3 === 0 ? 0x6b4a2b : 0x2b2f35);
+    }
+    for (let g = 0; g < 5; g++) k.box(-1.2 + g * 0.6, 1.95 - 0.02, 0.08, 0.26, 0.1, 0.04, 0x2b2f35);
+  });
+  wallSign(x, 1, D / 2 - 3.5, 2.6, "EYES & EARS ON", 0xe8590c, 0xffffff, 3.2, 0.5, true, "Muzzle down range. Always.");
+  wallSign(x, 2, 0, 3.2, info.name.toUpperCase(), 0x1f2328, 0xe8590c, Math.min(8, W * 0.6), 0.6, true);
+  bench(x, W / 2 - 2.6, D / 2 - 2.0, -Math.PI / 2, 3.0, 0x3b3f46, 0x2b2f35, 3);
+  linearLights(x, 2, "x", 0xfff6e6);
+  x.views.push(
+    { x: -W / 2 + 0.5 + 2.5 * lw, z: line + 1.45, yaw: 0, pitch: -0.1 },
+    { x: W / 2 - 1.2, z: D / 2 - 1.2, yaw: yawTo(W / 2 - 1.2, D / 2 - 1.2, 0, far), pitch: -0.04 },
+  );
+}
+
+/** One straight run of steps: centred on x, its foot at zFoot, climbing towards -z (dir -1) or +z. */
+type Run = { x: number; w: number; zFoot: number; dir: 1 | -1; n: number; go: number; y0: number; open: (1 | -1)[] };
+
+/**
+ * Where a home's staircase really goes (metres), facing you as you come in from the front: a
+ * straight flight of 16 gentle steps up towards the back when the hall is deep enough; otherwise a
+ * U-shaped stair (like most Lagos duplexes): 9 steps up one side to a landing at the back, 9 more
+ * back down the other side. The stairs' spot in the plan sets where; the room it's in, how deep.
+ */
+function stairFlight(plan: HomePlan, level: number, it: { x: number; y: number; kind: string; rot: number }) {
+  const { w: GW, d: GD } = SIZES[plan.size];
+  const W = GW * CELL_M, D = GD * CELL_M;
+  const H = 2.8;
+  const s = itemSize(it as Parameters<typeof itemSize>[0]);
+  const x0 = it.x * CELL_M - W / 2, x1 = (it.x + s.w) * CELL_M - W / 2;
+  const z0 = it.y * CELL_M - D / 2;
+  const r = roomAt(plan.floors[level], it.x, it.y);
+  const zEnd = Math.min(D / 2 - 0.5, r ? (r.y + r.d) * CELL_M - D / 2 : z0 + 4);
+  const avail = zEnd - z0;
+  const nearLeft = x0 + W / 2 <= W / 2 - x1;
+  const wall: 1 | -1 = nearLeft ? -1 : 1;
+  const style = (it.x * 7 + it.y * 3) % 3;
+  if (avail >= 5.6) {
+    // Straight: from 0.9 m off the back wall (the floor above carries on there) to the front.
+    const w = 1.1, L = 4.4, n = 16;
+    const fx = nearLeft ? x0 + w / 2 : x1 - w / 2;
+    const top = z0 + 0.9;
+    const runs: Run[] = [{ x: fx, w, zFoot: top + L, dir: -1, n, go: L / n, y0: 0, open: [(-wall) as 1 | -1] }];
+    return { kind: "straight" as const, runs, rise: H / n, x: fx, z: top + L / 2, w, d: L, foot: { x: fx, z: top + L + 0.45 }, exit: { x: fx, z: top - 0.45 }, wall, style };
+  }
+  // U-shaped: two runs side by side, a landing across the back.
+  const each = Math.min(1.15, (x1 - x0 - 0.08) / 2);
+  const ax = nearLeft ? x0 + each / 2 : x1 - each / 2;
+  const bx = ax - wall * (each + 0.08);
+  const Lu = Math.max(1.9, Math.min(3.6, avail - 1.0));
+  const land = Math.min(1.0, Lu * 0.3);
+  const n = 9;
+  const go = (Lu - land) / n;
+  const runs: Run[] = [
+    { x: ax, w: each, zFoot: z0 + Lu, dir: -1, n, go, y0: 0, open: [(-wall) as 1 | -1] },
+    { x: bx, w: each, zFoot: z0 + land, dir: 1, n, go, y0: (n + 0) * (H / (2 * n)), open: [wall] },
+  ];
+  return { kind: "u" as const, runs, land, rise: H / (2 * n), x: (ax + bx) / 2, z: z0 + Lu / 2, w: 2 * each + 0.08, d: Lu, foot: { x: ax, z: z0 + Lu + 0.45 }, exit: { x: bx, z: z0 + Lu + 0.45 }, wall, style, z0, ax, bx, each };
+}
+type Flight = ReturnType<typeof stairFlight>;
+const overlapsFlight = (f: Flight, r: { x: number; z: number; w: number; d: number }) => Math.abs(r.x - f.x) < (r.w + f.w) / 2 && Math.abs(r.z - f.z) < (r.d + f.d) / 2 + 0.5;
+
+/**
+ * Draw a staircase (see stairFlight) in one of three styles, after real ones: floating oak treads
+ * on a black steel spine with tall black bars and light strips on the wall; white stairs with a
+ * blue carpet runner and slim black balusters; or dark wood treads over white risers with a
+ * wrought-iron railing and a wide rounded bottom step.
+ */
+function drawFlight(x: Ctx, f: Flight, wood: number) {
+  const { k } = x;
+  const black = 0x1f2125;
+  const rise = f.rise;
+  const dark = f.style === 2;
+  const tread = dark ? 0x4a2c1c : wood;
+  const riser = 0xf6f4ef;
+  const runDraw = (r: Run, first: boolean) => {
+    const zAt = (st: number) => r.zFoot + r.dir * (st + 0.5) * r.go;
+    const yTop = (st: number) => r.y0 + (st + 1) * rise;
+    const len = r.n * r.go;
+    const hgt = r.n * rise;
+    const slopeLen = Math.hypot(len, hgt);
+    // Turned so the rail climbs the same way as the steps.
+    const rx = r.dir === -1 ? Math.atan2(hgt, len) : -Math.atan2(hgt, len);
+    const zMid = r.zFoot + (r.dir * len) / 2;
+    for (let st = 0; st < r.n; st++) {
+      const zz = zAt(st);
+      if (f.style === 0) {
+        k.box(r.x, yTop(st) - 0.06, zz, r.w, 0.06, r.go + 0.04, st % 2 ? wood : shadeHex(wood, 0.05));
+        k.box(r.x, yTop(st) - rise, zz - (r.dir * r.go) / 2, 0.12, rise, 0.06, black);
+        k.box(r.x, yTop(st) - 0.08, zz, 0.12, 0.03, r.go, black);
+      } else {
+        const wide = dark && first && st < 2 ? 0.3 - st * 0.13 : 0;
+        const o = r.open[0];
+        k.box(r.x + o * (wide / 2), yTop(st) - 0.045, zz, r.w + wide + 0.02, 0.045, r.go + 0.03, tread);
+        k.box(r.x + o * (wide / 2), yTop(st) - rise, zz - (r.dir * r.go) / 2, r.w + wide, rise - 0.045, 0.02, riser, { noAo: true });
+        if (wide) k.cyl(r.x + o * (r.w / 2 + wide), yTop(st) - rise, zz, r.go / 2 + 0.02, r.go / 2 + 0.02, rise, riser, 14);
+        if (!dark) k.box(r.x, yTop(st) + 0.001, zz, r.w * 0.62, 0.01, r.go, st % 2 ? 0x41618f : 0x3b5880, { noAo: true });
+        // Closed in underneath on the open side.
+        k.box(r.x + o * (r.w / 2 + 0.025), r.y0, zz, 0.04, yTop(st) - r.y0 - 0.02, r.go, 0xf3f1ec, { noAo: true });
+      }
+    }
+    // Underneath: a smooth white soffit (the floating stair shows its steel spine instead).
+    if (f.style !== 0 && r.y0 > 0) k.box(r.x, r.y0 + hgt / 2 - 0.16, zMid, r.w, 0.05, slopeLen, riser, { rx, noAo: true });
+    for (const o of r.open) {
+      const ex = r.x + o * (r.w / 2 + 0.01);
+      for (let st = 0; st < r.n; st++) {
+        if (f.style === 0) k.box(ex, yTop(st), zAt(st), 0.025, 0.95, 0.025, black);
+        else {
+          k.cyl(ex, yTop(st), zAt(st), 0.012, 0.012, 0.88, black, 6);
+          if (dark && st % 2 === 0) k.ring(ex, yTop(st) + 0.45, zAt(st), 0.05, 0.008, black);
+        }
+      }
+      k.box(ex, r.y0 + hgt / 2 + 0.92, zMid, 0.06, 0.05, slopeLen + 0.06, f.style === 0 ? black : dark ? 0x3b2416 : shadeHex(wood, -0.15), { rx, noAo: true });
+      if (first && f.style !== 0) k.box(ex, 0, r.zFoot - (r.dir * r.go) / 2, 0.1, 1.05 + rise, 0.1, dark ? 0x3b2416 : shadeHex(wood, -0.15));
+    }
+  };
+  f.runs.forEach((r, i) => runDraw(r, i === 0));
+  if (f.kind === "u") {
+    // The landing across the back, at the height between the two runs, on a post.
+    const y = f.runs[1].y0;
+    k.box(f.x, y - 0.12, f.z0 + f.land / 2, f.w, 0.12, f.land, f.style === 0 ? wood : dark ? 0x4a2c1c : wood);
+    if (f.style !== 0) k.box(f.x, 0, f.z0 + f.land / 2, f.w, y - 0.12, f.land, 0xf3f1ec, { noAo: true });
+    else k.box(f.x, 0, f.z0 + f.land - 0.08, 0.1, y - 0.12, 0.1, black);
+  }
+  if (f.style === 0) {
+    // Light strips on the wall beside the stairs.
+    const wx = f.x + f.wall * (f.w / 2 + 0.01);
+    for (let i = 0; i < 4; i++) {
+      const zz = f.z - f.d / 2 + (i + 0.5) * (f.d / 4);
+      k.box(wx, 0.5 + i * 0.35, zz, 0.02, 1.3, 0.07, 0xfff1d0, { layer: "glow" });
+      k.box(wx + f.wall * 0.01, 0.45 + i * 0.35, zz, 0.03, 1.4, 0.2, shadeHex(wood, -0.1));
+    }
+  }
+  k.shadow(f.x, 0, f.w + 0.3, f.d + 0.3, 0.25);
+  x.blocks.push({ x: f.x, z: f.z, w: f.w + 0.1, d: f.d, ry: 0 });
+}
+
+/** Kinds that stand against a wall and need it plain (no window, no curtains in front of them). */
+const AGAINST_WALL = new Set(["tv", "stairs", "wardrobe", "shelf", "fridge", "cooker", "counter", "sideboard", "art", "mirror", "clock", "screen", "djbooth", "homebar", "arcade", "dartboard", "jukebox", "piano"]);
+/** A planned home's floor: where the outside walls must stay plain, and the stairwell in the ceiling. */
+function homeClearings(home: NonNullable<InteriorInfo["home"]>): Pick<Room, "keepClear" | "ceilingHole"> {
+  const floor = home.plan.floors[home.level];
+  const { w: GW, d: GD } = SIZES[home.plan.size];
+  const W = GW * CELL_M, D = GD * CELL_M;
+  const rect = (it: (typeof floor.items)[number]) => {
+    const s = itemSize(it);
+    return { x: (it.x + s.w / 2) * CELL_M - W / 2, z: (it.y + s.d / 2) * CELL_M - D / 2, w: s.w * CELL_M, d: s.d * CELL_M };
+  };
+  const keepClear = floor.items.filter((i) => AGAINST_WALL.has(i.kind) && i.kind !== "stairs").map(rect);
+  const up = home.level < home.plan.floors.length - 1 ? floor.items.find((i) => i.kind === "stairs") : undefined;
+  const flight = up ? stairFlight(home.plan, home.level, up) : undefined;
+  const below = home.level > 0 ? home.plan.floors[home.level - 1].items.find((i) => i.kind === "stairs") : undefined;
+  for (const f of [flight, below ? stairFlight(home.plan, home.level - 1, below) : undefined]) if (f) keepClear.push({ x: f.x, z: f.z, w: f.w, d: f.d });
+  return { keepClear, ceilingHole: flight ? { x: flight.x, z: flight.z, w: flight.w + 0.1, d: flight.d } : undefined };
+}
+
 function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: InteriorInfo): { room: Room; pal: Pal; build: (x: Ctx) => void } {
   const home = pickOf(rnd, HOME);
   if (info?.home) {
     const { w, d } = SIZES[info.home.plan.size];
     const kinds: WallKind[] = ["windows", "windows", "windows", "windows"];
     return {
-      room: { w: w * CELL_M, d: d * CELL_M, h: 2.8, walls: kinds as Room["walls"], curtains: rnd() < 0.8 ? mixHex(home.fabric2, 0xfaf6ef, 0.5) : undefined, frame: rnd() < 0.5 ? 0xffffff : 0x2b2b2b },
+      room: { w: w * CELL_M, d: d * CELL_M, h: 2.8, walls: kinds as Room["walls"], curtains: rnd() < 0.8 ? mixHex(home.fabric2, 0xfaf6ef, 0.5) : undefined, frame: rnd() < 0.5 ? 0xffffff : 0x2b2b2b, ...homeClearings(info.home) },
       pal: home,
       build: (x) => plannedHome(x, info.home!),
     };
@@ -3984,6 +4247,8 @@ function plan(theme: Theme, rnd: Rng, variant?: InteriorInfo["variant"], info?: 
       return { room: { w: 14, d: 12, h: 4.2, walls: ["solid", "glass", "glass", "glass"], frame: 0xb08458 }, pal: SPA_PAL, build: spaRoom };
     case "courtroom":
       return { room: { w: 14, d: 11, h: 4.4, walls: ["solid", "tall", "solid", "tall"] }, pal: COURT_PAL, build: courtroom };
+    case "range":
+      return { room: { w: 13, d: 26, h: 4.2, walls: ["solid", "solid", "solid", "solid"] }, pal: RANGE_PAL, build: shootingRange };
     case "church":
       return { room: { w: 16, d: 26, h: 12, walls: ["solid", "tall", "solid", "tall"] }, pal: CHURCH_PAL, build: churchNave };
     case "mosque":
@@ -4142,8 +4407,19 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
     x.spots.push({ x: cx + 0.3, z: cz + 0.4, ry: rnd() * 6, pose: "stand", y: 0 });
     x.views.push({ x: cx, z: cz + Math.min(1.2, rd / 3), yaw: 0, pitch: -0.12 });
   }
+  // The flights on this floor (up from here, and up to here from below): nothing stands on them.
+  const upItem = level < plan.floors.length - 1 ? floor.items.find((i) => i.kind === "stairs") : undefined;
+  const belowItem = level > 0 ? plan.floors[level - 1].items.find((i) => i.kind === "stairs") : undefined;
+  const flights = [upItem ? stairFlight(plan, level, upItem) : null, belowItem ? stairFlight(plan, level - 1, belowItem) : null].filter((f): f is Flight => !!f);
   // The furniture, in the colours of each room's style.
   for (const it of floor.items) {
+    if (it.kind !== "stairs" && it.kind !== "rug") {
+      const sz = itemSize(it);
+      const r = { x: mx(it.x + sz.w / 2), z: mz(it.y + sz.d / 2), w: sz.w * CELL_M, d: sz.d * CELL_M };
+      if (flights.some((f) => overlapsFlight(f, r))) continue;
+      // Nothing standing about in the stair hall to block the view of the stairs.
+      if (flights.length && (it.kind === "plant" || it.kind === "sideboard") && roomAt(floor, it.x, it.y)?.kind === "hall") continue;
+    }
     const centre = itemSize(it);
     const pal = styledPal(x.pal, roomAt(floor, Math.floor(it.x + centre.w / 2), Math.floor(it.y + centre.d / 2)));
     const wood = pal.wood;
@@ -4606,43 +4882,18 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
         });
         x.lamps.push({ x: cx, y: room.h - 0.9, z: cz });
         break;
-      case "stairs":
-        k.at(cx, 0, cz, ry, () => {
-          // A proper staircase rising towards the wall behind: wooden treads with a little nosing
-          // over pale risers, a stringer either side, newel posts at the foot and the top, and
-          // balusters under a sloping handrail on both sides.
-          const n = 14;
-          const sw = fw - 0.16, run = fd - 0.2;
-          const rise = room.h / n;
-          const go = run / n;
-          const riser = shadeHex(pal.wall, -0.04);
-          for (let st = 0; st < n; st++) {
-            const zz = run / 2 - (st + 0.5) * go;
-            const top = (st + 1) * rise;
-            k.box(0, top - 0.045, zz - 0.015, sw + 0.02, 0.045, go + 0.03, st % 2 ? wood : shadeHex(wood, 0.05));
-            k.box(0, top - rise, zz + go / 2 - 0.01, sw, rise - 0.045, 0.02, riser, { noAo: true });
-          }
-          // The space under the stairs, closed in, with a little cupboard door.
-          const slope = Math.atan2(room.h, run);
-          for (const side of [-1, 1]) {
-            const sx = side * (sw / 2 + 0.04);
-            // The stringer: a board along the slope.
-            k.box(sx, room.h / 2 - 0.12, 0, 0.06, 0.24, Math.hypot(room.h, run), shadeHex(wood, -0.1), { rx: slope, noAo: true });
-            // Balusters every other step, the handrail along their tops, newel posts at each end.
-            for (let st = 1; st < n; st += 2) {
-              const zz = run / 2 - (st + 0.5) * go;
-              k.cyl(sx, (st + 1) * rise, zz, 0.018, 0.018, 0.86, 0xf1efea, 6);
-            }
-            k.box(sx, 0.86 + room.h / 2 + rise / 2, 0, 0.07, 0.05, Math.hypot(room.h, run) + 0.05, shadeHex(wood, -0.15), { rx: slope, noAo: true });
-            k.box(sx, 0, run / 2 - go / 2, 0.11, 1.0 + rise, 0.11, shadeHex(wood, -0.15));
-            k.ball(sx, 1.02 + rise, run / 2 - go / 2, 0.065, shadeHex(wood, -0.15), { w: 10, h: 8 });
-          }
-          k.box(0, 0, 0, sw, 0.02, run, shadeHex(pal.wall, -0.08), { noAo: true });
-          k.shadow(0, 0, sw + 0.3, run + 0.3, 0.3);
-          x.blocks.push({ x: cx, z: cz, w: s.w * CELL_M - 0.1, d: s.d * CELL_M - 0.1, ry: 0 });
-        });
-        if (level < plan.floors.length - 1) x.items.push({ kind: "stairs", label: "Go upstairs", x: cx, y: 0.6, z: cz, r: 0.8 });
+      case "stairs": {
+        if (level >= plan.floors.length - 1) break;
+        const fl = stairFlight(plan, level, it);
+        drawFlight(x, fl, wood);
+        // The way up: at the foot of the stairs. And a view from there, looking up them.
+        x.items.push({ kind: "stairs", label: "Go upstairs", x: fl.foot.x, y: 0.5, z: fl.foot.z, r: 0.8 });
+        {
+          const D2 = (SIZES[plan.size].d * CELL_M) / 2;
+          x.views.push({ x: fl.x, z: Math.min(D2 - 0.4, fl.z + fl.d / 2 + 1.9), yaw: 0, pitch: 0.12 });
+        }
         break;
+      }
     }
   }
   // The dance floor: every light-up tile on this floor in one go, changing colour on the beat
@@ -4693,26 +4944,33 @@ function plannedHome(x: Ctx, home: NonNullable<InteriorInfo["home"]>) {
   if (level > 0) {
     const below = plan.floors[level - 1].items.find((i) => i.kind === "stairs");
     if (below) {
-      const s = itemSize(below);
-      const cx = mx(below.x + s.w / 2), cz = mz(below.y + s.d / 2);
-      const w = s.w * CELL_M - 0.1, d = s.d * CELL_M - 0.1;
-      // The stairwell: the top steps showing in the opening, a railing round three sides (the
-      // fourth is where you come up), with a post at each corner.
-      k.box(cx, 0.001, cz, w, 0.01, d, 0x3b3530, { noAo: true });
-      for (let st = 0; st < 3; st++) k.box(cx, 0.002 - st * 0.0005, cz - d / 2 + 0.25 + st * 0.3, w - 0.1, 0.008, 0.26, shadeHex(pal.wood, -0.05 - st * 0.08), { noAo: true });
-      const rail = shadeHex(pal.wood, -0.15);
-      for (const [rx, rz, rw, rd] of [[cx, cz - d / 2, w, 0.05], [cx - w / 2, cz, 0.05, d], [cx + w / 2, cz, 0.05, d]] as const) {
-        k.box(rx, 0.92, rz, rw + 0.04, 0.05, rd + 0.04, rail, { noAo: true });
-        const along = rw > rd ? rw : rd;
-        const nb = Math.max(2, Math.round(along / 0.25));
-        for (let b = 0; b <= nb; b++) {
-          const t = -along / 2 + (along / nb) * b;
-          k.cyl(rx + (rw > rd ? t : 0), 0, rz + (rw > rd ? 0 : t), 0.016, 0.016, 0.92, 0xf1efea, 6);
+      // The stairwell: the opening over the stairs from below, the top steps showing, a railing
+      // round it except where you step off. (When the stairs carry on up from here, they stand in
+      // it instead.)
+      const f = stairFlight(plan, level - 1, below);
+      const upHere = level < plan.floors.length - 1 && floor.items.some((i) => i.kind === "stairs");
+      if (!upHere) {
+        const { x: cx, z: cz, w, d } = f;
+        k.box(cx, 0.001, cz, w, 0.01, d, 0x2b2622, { noAo: true });
+        const last = f.runs[f.runs.length - 1];
+        for (let st = 0; st < 4; st++) k.box(last.x, 0.002 - st * 0.0004, f.exit.z + (f.kind === "u" ? -0.6 - st * last.go : 0.6 + st * last.go), last.w - 0.06, 0.008, Math.max(0.1, last.go - 0.03), shadeHex(pal.wood, -0.05 - st * 0.1), { noAo: true });
+        const rail = shadeHex(pal.wood, -0.15);
+        const openX = cx - f.wall * (w / 2);
+        // Straight: rail down the open side and across the front. U: across the front of the first run.
+        const rails: [number, number, number, number][] =
+          f.kind === "straight" ? [[openX, cz, 0.05, d], [cx, cz + d / 2, w, 0.05]] : [[f.ax, cz + d / 2, f.each, 0.05]];
+        for (const [rx, rz, rw, rd] of rails) {
+          k.box(rx, 0.92, rz, rw + 0.04, 0.05, rd + 0.04, rail, { noAo: true });
+          const along = rw > rd ? rw : rd;
+          const nb = Math.max(2, Math.round(along / 0.2));
+          for (let bb = 0; bb <= nb; bb++) {
+            const t = -along / 2 + (along / nb) * bb;
+            k.cyl(rx + (rw > rd ? t : 0), 0, rz + (rw > rd ? 0 : t), 0.014, 0.014, 0.92, 0x1f2125, 6);
+          }
         }
+        x.blocks.push({ x: cx, z: cz, w: w + 0.1, d, ry: 0 });
       }
-      for (const [px, pz] of [[cx - w / 2, cz - d / 2], [cx + w / 2, cz - d / 2], [cx - w / 2, cz + d / 2], [cx + w / 2, cz + d / 2]]) k.box(px, 0, pz, 0.09, 1.02, 0.09, rail);
-      x.blocks.push({ x: cx, z: cz, w, d, ry: 0 });
-      x.items.push({ kind: "stairs", label: "Go downstairs", x: cx, y: 0.3, z: cz, r: 0.8 });
+      x.items.push({ kind: "stairs", label: "Go downstairs", x: f.exit.x, y: 0.3, z: f.exit.z, r: 0.8 });
     }
   }
   // Coming in: the front door is in the middle of the front wall.

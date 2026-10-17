@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { RoomMember } from "../rooms";
+import { FeeGate } from "../minigames/fee";
 import { Sheet } from "../sheet";
 import { Archery } from "./archery";
 import { Cards } from "./cards";
@@ -14,7 +15,7 @@ import { Heist } from "./heist";
 import type { ActivityPlayer } from "./hub";
 import { Jukebox } from "./jukebox";
 import { Karaoke } from "./karaoke";
-import { Order } from "./order";
+import { Order, type Ordering } from "./order";
 import { PhotoSpot } from "./photo";
 import { Piano } from "./piano";
 import { Pool } from "./pool";
@@ -40,6 +41,7 @@ export function ActivitySheet({
   onClose,
   seating,
   onUseStairs,
+  ordering,
 }: {
   item: ActivityItem;
   roomId: string;
@@ -49,6 +51,8 @@ export function ActivitySheet({
   onClose: () => void;
   seating?: Seating;
   onUseStairs?: () => void;
+  /** Ordering food: where you are, whether you're sitting, what happens once it's paid. */
+  ordering?: Ordering;
 }) {
   const games = GAMES_FOR[item.kind] ?? [];
   const [game, setGame] = useState<GameId>(games[0] ?? "seat");
@@ -70,12 +74,21 @@ export function ActivitySheet({
           ))}
         </div>
       )}
-      <Game key={game} game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} />
+      {PAID.has(game) ? (
+        <FeeGate key={game} game={game} title={GAME_TITLE[game]} signedIn={!!me}>
+          <Game game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} ordering={ordering} />
+        </FeeGate>
+      ) : (
+        <Game key={game} game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} ordering={ordering} />
+      )}
     </Sheet>
   );
 }
 
-function Game({ game, props, item, seating, onUseStairs }: { game: GameId; props: GameProps; item: ActivityItem; seating?: Seating; onUseStairs?: () => void }) {
+/** The games here cost a small fee to play (../minigames/fee); seats, menus and the rest don't. */
+const PAID = new Set<GameId>(["darts", "archery", "reflex", "trivia", "pool", "cards", "rps", "dice", "karaoke"]);
+
+function Game({ game, props, item, seating, onUseStairs, ordering }: { game: GameId; props: GameProps; item: ActivityItem; seating?: Seating; onUseStairs?: () => void; ordering?: Ordering }) {
   switch (game) {
     case "seat":
       return <SeatCard {...props} seatId={item.id} seating={seating} />;
@@ -102,9 +115,9 @@ function Game({ game, props, item, seating, onUseStairs }: { game: GameId; props
     case "jukebox":
       return <Jukebox {...props} />;
     case "bar":
-      return <Order {...props} where="bar" />;
+      return <Order {...props} where="bar" ordering={ordering} />;
     case "menu":
-      return <Order {...props} where="restaurant" />;
+      return <Order {...props} where="restaurant" ordering={ordering} />;
     case "stairs":
       return <Stairs {...props} onUseStairs={onUseStairs} />;
     case "window":

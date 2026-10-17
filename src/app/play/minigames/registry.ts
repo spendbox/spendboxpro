@@ -1,4 +1,4 @@
-// All 100 minigames (docs/MINIGAMES.md). Each names an engine (./engines, ./turns) and its
+// All the minigames (docs/MINIGAMES.md: the 100, paintball, and Police & Thieves). Each names an engine (./engines, ./turns) and its
 // settings, the kinds of places it belongs to (so a bank offers heist games and a gym offers
 // boxing pads), and bronze / silver / gold scores (mint rewards, heist pass marks).
 //
@@ -6,7 +6,7 @@
 
 import type { Category, Cfg, MiniGameDef } from "./types";
 
-type Extra = Partial<Pick<MiniGameDef, "lowerWins" | "seats" | "hidden" | "legacy">>;
+type Extra = Partial<Pick<MiniGameDef, "lowerWins" | "seats" | "hidden" | "legacy" | "full">>;
 
 function S(n: number, id: string, title: string, cat: Category, engine: string, cfg: Cfg, unit: string, grades: [number, number, number], places: string[], icon: string, colour: string, blurb: string, how: string, extra: Extra = {}): MiniGameDef {
   return { n, id, title, cat, engine, cfg, unit, grades, places, icon, colour, blurb, how, kind: "score", ...extra };
@@ -78,8 +78,8 @@ export const MINIGAMES: MiniGameDef[] = [
     "Speed, then the perfect take-off angle.", "Tap fast to build speed, then stop the angle needle near 45 degrees. Best of three jumps."),
   S(25, "javelin", "Javelin", "sport", "meter", { style: "throw", rounds: 3 }, "metres", [55, 70, 85], ["stadium", "school", "campus"], "MoveUpRight", "#e8590c",
     "Power and angle for the longest throw.", "Stop the power bar at the top, then the angle at about 40 degrees. Best of three throws."),
-  S(26, "shooting-range", "Shooting Range", "shooting", "targets", { theme: "range", seconds: 40 }, "points", [150, 260, 360], ["police", "military", "funfair", "gym", "anywhere"], "Crosshair", "#e8590c",
-    "Hit the targets before they drop.", "Tap the targets as they pop up. Bullseyes score more. Don't hit the hostages!"),
+  S(26, "shooting-range", "Shooting Range", "shooting", "range3d", {}, "points", [120, 210, 300], ["range", "police", "military", "funfair", "anywhere"], "Crosshair", "#e8590c",
+    "Pistol, carbine and scoped rifle on a 3D indoor range.", "Drag to aim, tap or press FIRE to shoot. Three rounds: paper at 10 m, turning targets at 25 m, runners at 50 m (use the scope, hits count double). Bullseye is 10. Watch your ammo and never hit the blue hostages.", { full: true }),
   S(27, "clay-pigeon", "Clay Pigeon", "shooting", "targets", { theme: "clay", seconds: 45 }, "clays", [8, 14, 19], ["park", "bigpark", "military", "anywhere"], "Disc", "#e8590c",
     "Pull! Shoot the flying clays.", "Clays fly across the sky. Tap them to break them. You have 25 shells."),
   S(28, "duck-hunt", "Duck Hunt", "shooting", "targets", { theme: "ducks", seconds: 45 }, "ducks", [10, 18, 25], ["park", "bigpark", "pond", "funfair", "anywhere"], "Bird", "#2f9e44",
@@ -134,10 +134,10 @@ export const MINIGAMES: MiniGameDef[] = [
     "Race your four tokens home.", "Roll a six to bring a token out. Land on someone to send them back. First with all four home wins."),
   T(52, "snakes-ladders", "Snakes and Ladders", "board", "snakes", {}, [2, 4], [...HOME, "school", "playground", ...RIDES], "Dice3", "#2f9e44",
     "Climb the ladders, dodge the snakes.", "Roll and move. Ladders take you up, snakes take you down. First to 100 wins."),
-  T(53, "draughts", "Draughts", "board", "draughts", {}, [2, 2], [...PARK, "restaurant", ...HOME, "market"], "Grid3x3", "#212529",
-    "Jump and crown.", "Move diagonally forward. You must jump when you can, and keep jumping. Reach the far side to become a king."),
-  T(54, "chess", "Chess Blitz", "board", "chess", {}, [2, 2], [...PARK, "campus", "school", "hotel", ...HOME], "Crown", "#212529",
-    "Checkmate the king.", "Tap a piece, then where to move it. Pawns become queens on the last row."),
+  T(53, "draughts", "Draughts", "board", "draughts", {}, [2, 2], [...PARK, "restaurant", ...HOME, "market", "club", "hotel", "anywhere"], "Grid3x3", "#212529",
+    "Full-screen 3D draughts: jump and crown.", "Play someone here on their phone (Challenge), a friend on this phone, or the computer. Move diagonally forward; you must jump when you can, and keep jumping. Reach the far side to be crowned. Drag to look round the board.", { full: true }),
+  T(54, "chess", "Chess", "board", "chess", {}, [2, 2], [...PARK, "campus", "school", "hotel", ...HOME, "club", "anywhere"], "Crown", "#212529",
+    "Full-screen 3D chess against a real player.", "Play someone here on their phone (Challenge), a friend on this phone, or the computer. Tap a piece, then where it goes. Castling, en passant, check and mate; pawns become queens on the last row. Drag to look round the board.", { full: true }),
   T(55, "ayo", "Ayo (Oware)", "board", "oware", {}, [2, 2], [...PARK, "market", ...HOME, "restaurant"], "CircleDot", "#a5673f",
     "Sow the seeds, capture the most.", "Tap one of your pits to sow its seeds round the board. Ending in their row on 2 or 3 seeds captures them."),
   T(56, "whot", "Whot!", "cards", "whot", {}, [2, 4], [...BAR, ...HOME, ...RIDES, "market"], "Shapes", "#c2255c",
@@ -234,7 +234,20 @@ export const MINIGAMES: MiniGameDef[] = [
     "Deliver the parcels on your bike.", "Pick up parcels and ride past the glowing doors to deliver them. Dodge pedestrians and potholes."),
   S(100, "treasure-hunt", "Treasure Hunt", "life", "treasure", { theme: "map", size: 7, chests: 3, digs: 14, rounds: 3 }, "points", [200, 330, 420], [...PARK, "museum", "monument", "anywhere"], "Map", "#a5673f",
     "Dig for the hidden chests.", "Tap to dig. Each hole tells you how far the nearest chest is. Find all three with the fewest digs."),
+
+  // ---------------------------------------------------------------- big games, full screen
+  S(101, "paintball", "Paintball", "shooting", "paintball", {}, "splats", [5, 10, 15], ["park", "bigpark", "funfair"], "Swords", "#e03131",
+    "Red against blue, 4 v 4, full screen in 3D.", "Team Splat: every hit is a splat for your team, first to 25. Quick match with whoever's looking for a game, a private match with a code for friends, or practice against bots. Only at parks. Left thumb moves, right thumb looks; tap to shoot or hold FIRE.", { full: true }),
+  S(102, "cops-robbers", "Police & Thieves", "shooting", "cops", {}, "points", [5, 10, 20], ["anywhere", ...POLICE, ...PARK], "Siren", "#1c4fd6",
+    "Every 8 hours: police against thieves in a whole city.", "A big game at 2am, 10am and 6pm (Lagos time). Sign up on a side (the sides stay even), buy guns, grenades, rocket launchers and tanks before it starts: it all goes into the pool, and the winning side shares it. Thieves rob the bank's vault and run for the hideout; police stop them. Watch a match that's on, or practise against bots any time.", { full: true }),
 ];
+
+/**
+ * The list of the 100 small games (Games in the menu and the Games button in places) is retired
+ * for now. The games still run where something else needs them (heists, job shifts, the shooting
+ * range, paintball, and the table games under Play).
+ */
+export const MINIGAMES_LISTED = false;
 
 export const MINIGAME_BY_ID = new Map(MINIGAMES.map((g) => [g.id, g]));
 

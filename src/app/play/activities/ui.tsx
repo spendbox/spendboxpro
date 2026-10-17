@@ -1,12 +1,12 @@
 "use client";
 
-import { cash } from "@/lib/world/value";
+import { PersonLink } from "../people/open-person";
 import { useEffect, useRef, useState } from "react";
 import { AvatarFace } from "@/components/avatar";
 import { Coins, Crown, Medal, Trophy, X } from "@/components/icons";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
-import { claimActivityReward, type RewardGame } from "../activity-actions";
+import type { RewardGame } from "../activity-actions";
 import type { RoomMember } from "../rooms";
 import { REWARDS } from "./games";
 import { useActivityRoom, type ActivityMsg, type ActivityPlayer } from "./hub";
@@ -213,7 +213,9 @@ export function Leaderboard({
                 {i === 0 ? <Crown className="mx-auto size-4 text-gold-dark" /> : i === 1 ? <Medal className="mx-auto size-4 text-[#8b95a1]" /> : i + 1}
               </span>
               <Face p={e.p} size={24} />
-              <span className="min-w-0 flex-1 truncate font-medium">{e.p.id === meId ? "You" : e.p.name}</span>
+              <PersonLink id={e.p.id} className="flex-1 truncate font-medium">
+                {e.p.id === meId ? "You" : e.p.name}
+              </PersonLink>
               <span className="font-bold tabular-nums">
                 {e.score.toLocaleString("en")}
                 {unit ? <span className="ml-1 text-xs font-normal text-muted">{unit}</span> : null}
@@ -237,33 +239,10 @@ type Claim = { state: "idle" | "claiming" | "done"; coins: number; text: string 
 export function useGameReward(game: RewardGame | "piano" | "jukebox" | "slots" | "photo", signedIn: boolean) {
   const [claim, setClaim] = useState<Claim>({ state: "idle", coins: 0, text: "" });
   const reward = game in REWARDS ? REWARDS[game as RewardGame] : null;
+  // Games cost money to play now and never pay out (src/app/play/minigames/fee.ts): this just
+  // tells the quest tracker.
   async function finish(score: number, won?: boolean) {
     questEvent({ type: "play", game, score, won });
-    if (!reward) return;
-    if (!signedIn) return setClaim({ state: "done", coins: 0, text: "Sign in to win money." });
-    if (score < reward.min) {
-      return setClaim({ state: "done", coins: 0, text: reward.unit === "win" ? "" : `Get ${reward.min}+ ${reward.unit} to win money.` });
-    }
-    setClaim({ state: "claiming", coins: 0, text: "Collecting your winnings…" });
-    const res = await claimActivityReward(game as RewardGame, score);
-    if (!res.ok) return setClaim({ state: "done", coins: 0, text: res.error });
-    if (res.coins > 0) {
-      return setClaim({
-        state: "done",
-        coins: res.coins,
-        text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game winnings for today." : ""}`,
-      });
-    }
-    setClaim({
-      state: "done",
-      coins: 0,
-      text:
-        res.reason === "daily_limit"
-          ? "You've won all the game money for today. Playing is still fun!"
-          : res.reason === "too_soon"
-            ? "Nice! Games pay out once a minute each, so this one's just for glory."
-            : `Get ${reward.min}+ ${reward.unit} to win money.`,
-    });
   }
   return { claim, finish, reset: () => setClaim({ state: "idle", coins: 0, text: "" }), reward };
 }
@@ -300,16 +279,11 @@ const LENGTH: Record<RewardGame, string> = {
 
 /** "6 arrows. Score 30+ points to win ₦3,000–₦12,000 (more for a better score)". */
 export function RewardHint({ game }: { game: RewardGame }) {
-  const r = REWARDS[game];
   return (
     <p className="flex items-start gap-1.5 text-xs text-muted">
       <Coins className="mt-px size-3.5 shrink-0 text-gold-dark" />
       <span>
-        <b className="text-ink">{LENGTH[game]}.</b>{" "}
-        {r.unit === "win"
-          ? `Win the match to earn ${cash(r.coinsMax)}.`
-          : `Score ${r.min}+ ${r.unit} to win ${cash(r.coinsMin)}, up to ${cash(r.coinsMax)} for ${r.top}+.`}{" "}
-        5 paid games a day.
+        <b className="text-ink">{LENGTH[game]}.</b> Playing costs a small fee; games don&apos;t pay out money.
       </span>
     </p>
   );
