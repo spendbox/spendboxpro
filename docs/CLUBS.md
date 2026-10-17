@@ -51,3 +51,20 @@ When someone sprays, the notes fly in 3D (`src/app/play/city/money-spray.ts`): f
 another from the sprayer's hand at the dancer, fluttering and turning as they fall, then lying in
 a pile round the dancer's feet for 40 seconds. The more money, the more notes. (The flat shower
 of notes over the screen only shows where there's no 3D room.)
+
+## Bottle service
+
+At a club's bar, the menu opens on **Bottles**: champagne, cognac and tequila at real Lagos club
+prices (`src/lib/world/bottles.ts`), from Belaire Rosé (₦250k) and Moët (₦450k) up to Ace of Spades
+(₦5m) and the 3-litre Ace of Spades Jeroboam (₦30m). The ₦10m-door clubs (Quilox, Vaniti, Cubana
+and Billionaire's row) charge 1.5×, VIP clubs 1.2×. Up to 6 bottles an order, paid from Fun money
+then savings and burned (`game-db/126_bottle_service.sql`, the server works out the bill).
+
+Sit in a booth first. Then the show (`src/app/play/city/parade.ts`), seen by everyone in the club:
+- a line of hostesses in sparkly dresses walks in from the way in, single file, one per bottle,
+  each holding her bottle up high with a sparkler fizzing on top;
+- in front, one carries a light-up LED sign on a pole with your name ("BOTTLE SERVICE · TOLU"),
+  flashing pink, blue and gold;
+- they line up round your table facing you and dance with the bottles up, then set them down in
+  an ice bucket on your table (its sparklers fizz on a few seconds) and walk back out;
+- the whole club gets a news line: "🍾 Tolu just ordered 2 × Moët & Chandon Impérial!".

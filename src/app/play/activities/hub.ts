@@ -29,6 +29,8 @@ export type ActivityMsg =
   | { t: "spray"; from: ActivityPlayer; amount: number; shares: { id: string; name: string; coins: number }[] }
   /** Someone picked a tune. */
   | { t: "jukebox"; vibe: string; by: ActivityPlayer }
+  /** Bottles bought (already paid by the server): hostesses parade them to that seat ("<room>:seat:<n>"). */
+  | { t: "bottles"; from: ActivityPlayer; seat: string; ids: string[]; naira: number }
   /** A little news line for the room. */
   | { t: "toast"; text: string; icon?: ToastIcon; from?: string }
   /** Room trivia: a question, someone's answer, the end. */
