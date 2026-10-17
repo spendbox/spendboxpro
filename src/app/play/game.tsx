@@ -153,6 +153,7 @@ import * as reportActions from "./report-actions";
 import * as marketActions from "./market-actions";
 import { REGIONS, regionMap } from "@/lib/world";
 import { MINIGAMES_LISTED } from "./minigames/registry";
+import { BANK_ROBBERY } from "./activities/games";
 
 // Sheets opened from the map: loaded when first opened.
 const GhostsSheet = dynamic(() => import("./ghost-duel/ghosts-sheet").then((m) => m.GhostsSheet));
@@ -2112,7 +2113,8 @@ export function Game({
       case "bank":
         return { label: "Banking", icon: LandmarkIcon, run: () => setMoneyOpen(true) };
       case "vault":
-        return { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") };
+        // Robbing the bank is switched off for now (activities/games.ts BANK_ROBBERY).
+        return BANK_ROBBERY ? { label: "Crack the vault", icon: LandmarkIcon, run: act("vault", "The vault") } : null;
       case "church":
       case "mosque":
         return { label: "Pray", icon: Church, run: () => setPrayer(Date.now()) };
@@ -3998,12 +4000,12 @@ export function Game({
         )}
       </div>
 
-      {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (gently
-          bouncing): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
+      {/* Events (docs/EVENTS.md): a party button in the top right corner, under your cash (still,
+          no blinking): what's on nearby, and hosting your own (Game challenge is one of the kinds). */}
       {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <button
           onClick={() => setEventsOpen(true)}
-          className="events-pop pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
+          className="pointer-events-auto fixed right-3 top-14 z-20 grid size-12 place-items-center rounded-full bg-white text-[#d6336c] ring-1 ring-black/5 sm:right-4 sm:top-16"
           aria-label="Events: what's on, and host your own"
           title="Events"
         >
@@ -4031,7 +4033,7 @@ export function Game({
       {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[8.25rem] top-14 z-20 sm:right-[9.25rem] sm:top-16" />
       )}
-      {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player" }} onClose={() => setCopsOpen(false)} />}
+      {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} onClose={() => setCopsOpen(false)} />}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
           once they're on). On the real map it's in the column down the left instead. */}
       {!me.guest && !pushOn && !camera && !worldId && (

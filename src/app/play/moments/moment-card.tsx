@@ -41,9 +41,10 @@ const moodOf = (o: MomentOutcome, tone: string | undefined): MomentMood => ((o.r
 
 /**
  * onAnswered: the choice is settled (with how it went); onClose: closed (the cross before choosing,
- * which changes nothing, or Carry on after). closeLabel: the cross's name.
+ * which changes nothing, or Carry on after). closeLabel: the cross's name. onGone: it had already
+ * passed when answered (closed for good; onClose if not given).
  */
-export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away", className }: { shown: MomentShown; onClose: () => void; onAnswered?: (mood: MomentMood) => void; closeLabel?: string; className?: string }) {
+export function MomentCard({ shown, onClose, onAnswered, onGone, closeLabel = "Walk away", className }: { shown: MomentShown; onClose: () => void; onAnswered?: (mood: MomentMood) => void; onGone?: () => void; closeLabel?: string; className?: string }) {
   const [answered, setAnswered] = useState<Answered | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function MomentCard({ shown, onClose, onAnswered, closeLabel = "Walk away
     const r = await momentAnswer(shown.id, i).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
     setBusy(false);
     // Gone already (it timed out, or another one started on another screen): just close it.
-    if (!r.ok && r.error === "That moment has passed.") return onClose();
+    if (!r.ok && r.error === "That moment has passed.") return (onGone ?? onClose)();
     if (!r.ok) return setError(r.error);
     const c = def!.choices[i];
     const o = c.outcomes[r.outcome] ?? c.outcomes[0];

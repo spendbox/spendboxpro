@@ -28,14 +28,14 @@ export const RULES = {
   respawn: 4,
   shield: 2.5,
   grenadeFuse: 2.1,
-  grenadeSplash: 6,
-  grenadeDmg: 110,
+  grenadeSplash: 9,
+  grenadeDmg: 160,
   tankHp: 700,
   tankSpeed: 7.2,
   tankRadius: 2.3,
-  tankReload: 2.4,
-  tankSplash: 6,
-  tankDmg: 160,
+  tankReload: 2,
+  tankSplash: 10,
+  tankDmg: 240,
   heal: 2,
   /** Points for the team: a takedown, a bag of loot banked at the hideout, a bag the police took back. */
   killPoints: 1,
@@ -532,7 +532,8 @@ export function blast(city: City, c: V3, p: V3, radius: number, dmg: number) {
   const d = Math.hypot(p.x - c.x, p.y + 1 - c.y, p.z - c.z);
   if (d > radius) return 0;
   if (!city.canSee({ x: c.x, y: c.y + 0.3, z: c.z }, { x: p.x, y: p.y + 1, z: p.z }) && !city.canSee({ x: c.x, y: c.y + 0.3, z: c.z }, { x: p.x, y: p.y + 1.6, z: p.z })) return 0;
-  return Math.round(dmg * (1 - (d / radius) * 0.75));
+  // Full damage near the middle, still half at the edge.
+  return Math.round(dmg * (1 - Math.max(0, d / radius - 0.25) * 0.67));
 }
 
 // ---------------------------------------------------------------- the people

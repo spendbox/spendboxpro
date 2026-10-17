@@ -25,8 +25,8 @@ export type Msg =
   | { t: "ping"; by: string; n: string; tm: number; x: number; z: number }
   | { t: "sync"; sc: [number, number]; st: Record<string, number[]>; bags: { id: string; x: number; z: number }[] }
   // A sample game with friends: the room's host starts it (who's on which side, its city, its times).
-  | { t: "start"; seed: number; at: number; ends: number; tod: "day" | "dusk" | "night"; roster: { i: string; n: string; tm: number }[] };
-export type Member = { id: string; name: string; at: number; st: "play" | "watch" };
+  | { t: "start"; seed: number; at: number; ends: number; tod: "day" | "dusk" | "night"; roster: { i: string; n: string; tm: number; a?: unknown }[] };
+export type Member = { id: string; name: string; at: number; st: "play" | "watch"; av?: unknown };
 
 export class CopsNet {
   private channel: RealtimeChannel | null = null;
@@ -39,7 +39,7 @@ export class CopsNet {
 
   constructor(
     private readonly code: string,
-    readonly me: { id: string; name: string },
+    readonly me: { id: string; name: string; avatar?: unknown },
     private readonly st: "play" | "watch",
   ) {}
 
@@ -57,7 +57,7 @@ export class CopsNet {
       .subscribe((status) => {
         if (status !== "SUBSCRIBED" || this.channel !== channel) return;
         this.live = true;
-        void channel.track({ name: this.me.name, at: Date.now(), st: this.st });
+        void channel.track({ name: this.me.name, at: Date.now(), st: this.st, av: this.me.avatar ?? null });
         for (const m of this.outbox.splice(0)) void channel.send({ type: "broadcast", event: "m", payload: m });
       });
   }
@@ -82,12 +82,12 @@ export class CopsNet {
 
   private readPresence() {
     if (!this.channel) return;
-    const state = this.channel.presenceState() as Record<string, { name?: unknown; at?: unknown; st?: unknown }[]>;
+    const state = this.channel.presenceState() as Record<string, { name?: unknown; at?: unknown; st?: unknown; av?: unknown }[]>;
     const out: Member[] = [];
     for (const [id, metas] of Object.entries(state)) {
       const m = metas[metas.length - 1];
       if (!m) continue;
-      out.push({ id, name: typeof m.name === "string" ? m.name.slice(0, 24) : "Player", at: Number(m.at) || 0, st: m.st === "watch" ? "watch" : "play" });
+      out.push({ id, name: typeof m.name === "string" ? m.name.slice(0, 24) : "Player", at: Number(m.at) || 0, st: m.st === "watch" ? "watch" : "play", av: m.av && typeof m.av === "object" ? m.av : undefined });
     }
     out.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
     this.members = out;

@@ -452,7 +452,8 @@ end $$;
 /**
  * A match of a session that has started (it starts it, if its time has come): its seed, pool,
  * times and who's in it (each with their side and gear). p_room null: your own match (or the
- * first, to watch). Returns {status: 'open'} before the start.
+ * first, to watch). Each player comes with their avatar (worn in their side's uniform). Returns
+ * {status: 'open'} before the start.
  */
 create or replace function public.sched_room(p_user uuid, p_game text, p_starts timestamptz, p_room int default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -473,8 +474,8 @@ begin
     'status', s.status, 'room', v_room, 'rooms', s.rooms, 'seed', r.seed, 'pool', r.pool,
     'fight_at', s.fight_at, 'ends_at', s.ends_at, 'done', r.status = 'done', 'result', r.result,
     'me', public.sched_mine(p_user, s.id),
-    'roster', coalesce((select jsonb_agg(jsonb_build_object('i', user_id, 'n', name, 'tm', side, 'g', gear) order by side, joined_at)
-                          from public.sched_players where session_id = s.id and room = v_room), '[]'));
+    'roster', coalesce((select jsonb_agg(jsonb_build_object('i', sp.user_id, 'n', sp.name, 'tm', sp.side, 'g', sp.gear, 'a', pr.avatar) order by sp.side, sp.joined_at)
+                          from public.sched_players sp join public.profiles pr on pr.id = sp.user_id where sp.session_id = s.id and sp.room = v_room), '[]'));
 end $$;
 
 /**

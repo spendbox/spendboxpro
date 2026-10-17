@@ -45,7 +45,7 @@ export const GUNS: Record<GunId, Gun> = {
   shotgun: { name: "Shotgun", dmg: 12, rate: 1.2, auto: false, mag: 6, reload: 2.4, spread: 0.085, speed: 260, range: 26, pellets: 8, colour: 0x5c3d2e },
   rifle: { name: "Assault rifle", dmg: 22, rate: 8, auto: true, mag: 30, reload: 2, spread: 0.018, speed: 380, range: 110, colour: 0x3d4a3a },
   sniper: { name: "Sniper", dmg: 95, rate: 0.8, auto: false, mag: 5, reload: 2.6, spread: 0.05, speed: 650, range: 240, scope: true, colour: 0x2f3b2f },
-  rocket: { name: "Rocket launcher", dmg: 130, rate: 0.6, auto: false, mag: 1, reload: 2.2, spread: 0.01, speed: 48, range: 160, splash: 5.5, ammo: 6, colour: 0x4b5a3c },
+  rocket: { name: "Rocket launcher", dmg: 160, rate: 0.6, auto: false, mag: 1, reload: 2.2, spread: 0.01, speed: 55, range: 160, splash: 8, ammo: 6, colour: 0x4b5a3c },
 };
 
 export type Gear = { id: GearId; name: string; naira: number; max: number; kind: "gun" | "throw" | "heal" | "armour" | "vehicle"; blurb: string };
@@ -56,10 +56,10 @@ export const GEAR: Gear[] = [
   { id: "rifle", name: "Assault rifle", naira: 50_000, max: 1, kind: "gun", blurb: "The all-rounder: hits hard, reaches far." },
   { id: "sniper", name: "Sniper", naira: 80_000, max: 1, kind: "gun", blurb: "One shot nearly takes anyone down. Aim to scope in." },
   { id: "rocket", name: "Rocket launcher", naira: 120_000, max: 1, kind: "gun", blurb: "Six rockets. Blows up anyone near, and tanks." },
-  { id: "grenade", name: "Grenade", naira: 5_000, max: 6, kind: "throw", blurb: "Throw over cover; it goes off after 2 seconds." },
+  { id: "grenade", name: "Grenade", naira: 5_000, max: 6, kind: "throw", blurb: "Throw over cover; it goes off after 2 seconds and hits everyone 9 m round." },
   { id: "medkit", name: "Medkit", naira: 5_000, max: 3, kind: "heal", blurb: "Back to full health in a moment." },
-  { id: "armour", name: "Body armour", naira: 30_000, max: 1, kind: "armour", blurb: "60 more health, back every time you respawn." },
-  { id: "tank", name: "Tank", naira: 300_000, max: 1, kind: "vehicle", blurb: "Call it in once: 700 health and a cannon." },
+  { id: "armour", name: "Body armour", naira: 30_000, max: 1, kind: "armour", blurb: "60 more health, back every time you respawn. Police get it free." },
+  { id: "tank", name: "Tank", naira: 300_000, max: 1, kind: "vehicle", blurb: "Call it in once: 700 health and a cannon that blasts 10 m round." },
 ];
 export const GEAR_BY_ID = new Map(GEAR.map((g) => [g.id, g]));
 
@@ -88,6 +88,9 @@ export function loadoutNaira(l: Loadout) {
 
 /** Practice against bots: what you play with (nothing to buy, no pool). */
 export const PRACTICE_LOADOUT: Loadout = { rifle: 1, shotgun: 1, rocket: 1, grenade: 3, medkit: 2, armour: 1, tank: 1 };
+
+/** Police always wear body armour (free); thieves can buy it. */
+export const hasArmour = (team: number, l: Loadout) => team === 0 || !!l.armour;
 
 export const SIDES = [
   { name: "Police", short: "POLICE", colour: 0x1c4fd6, css: "#5c8dff", dark: 0x0f2a6b },

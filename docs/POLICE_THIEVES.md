@@ -18,8 +18,10 @@ drawing `scene.ts`, connection `net.ts`), the shop and prices `src/lib/cops.ts`,
    out and get everything back.
 2. **Buy your weapons and gear** in the Armoury before the start (you always have a pistol): SMG
    ₦20k, shotgun ₦30k, assault rifle ₦50k, sniper ₦80k, rocket launcher ₦120k (6 rockets),
-   grenades ₦5k each (up to 6), medkits ₦5k (up to 3), body armour ₦30k, a **tank** ₦300k (call
-   it in once: 700 health, a cannon). The price always comes from the server's copy of the list.
+   grenades ₦5k each (up to 6, 160 damage, 9 m blast), medkits ₦5k (up to 3), body armour ₦30k
+   (**police get it free**), a **tank** ₦300k (call it in once: 700 health, a cannon: 240
+   damage, 10 m blast). Rockets: 160 damage, 8 m blast. A blast hurts fully near its middle and
+   still half at the edge, but not through solid cover. The price always comes from the server's copy of the list.
 3. **Everything spent on gear goes into the pool**, less a tenth for the house.
 4. **At the start** the players are shared into matches of up to **8 a side** (more players make
    more matches, round-robin, so each is even), each with its own pool and city. **Bots fill any
@@ -40,6 +42,14 @@ At the top of the lobby, free, any time, no sign-in needed: **against bots** (as
 thief, 5 minutes), or **with friends**: one gets a code, the others put it in and Join, sides are
 shared out in turn, bots fill the rest, and the first one in picks 3, 5 or 10 minutes and starts.
 Every weapon and a tank to try; nothing to pay, nothing to win.
+
+## How it looks and sounds
+Everyone is their own 3D avatar (their face, skin, hair and build) in their side's uniform:
+police in a navy shirt, cap, dark trousers and boots with a black POLICE vest; thieves in a black
+hoodie, joggers, shades and a face mask. Arms hold the gun up where they aim. You're in full
+detail, everyone else in the light version (so a full match stays smooth on a phone). Each gun
+has its own shot (made in code: a crack, a body of noise, a thump and an echo off the
+buildings), explosions boom and rumble; far-off shots are quieter, duller, and left or right.
 
 ## The city
 260 m across: a grid of roads and 25 blocks. The bank in the middle, police HQ at the west end,

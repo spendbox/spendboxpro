@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bomb, ChevronLeft, ChevronRight, Crosshair, Eye, HeartPulse, Map as MapIcon, MessageCircle, RotateCcw, Send, Shield, Swords, Target, Truck, X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { GUNS, SIDES, gunsOf, type GunId, type Loadout } from "@/lib/cops";
+import { GUNS, SIDES, gunsOf, hasArmour, type GunId, type Loadout } from "@/lib/cops";
 import { FullScreen } from "../minigames/fullscreen";
 import { canWebGL } from "../minigames/webgl";
 import { tone } from "../minigames/sfx";
+import { cue, explosion, gunshot, listen } from "./sfx";
 import { playSfx } from "../sound";
 import type { CopsNet, Msg } from "./net";
 import { CopsScene, type Tod } from "./scene";
@@ -22,7 +23,8 @@ import {
 // CROUCH (hide behind low cover), RELOAD, switch guns, throw a grenade, use a medkit, call in a
 // tank. Auto-aim helps on a phone. Team chat and pings for your side only.
 
-export type Seat = { i: string; n: string; tm: number; g: Loadout; b?: boolean };
+/** a: the player's own avatar (they wear it in their side's uniform). */
+export type Seat = { i: string; n: string; tm: number; g: Loadout; b?: boolean; a?: unknown };
 export type Setup = { key: string | null; room: number; seed: number; fightAt: number; endsAt: number; roster: Seat[]; tod: Tod; watch: boolean; pool: number };
 export type EndRow = { id: string; name: string; team: number; bot: boolean; kills: number; downs: number; loot: number; returns: number; dmg: number; act: number; me: boolean };
 export type EndResult = { winner: number; scores: [number, number]; rows: EndRow[]; shot: string | null };
@@ -102,8 +104,8 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
       const l = s.g ?? {};
       gear.set(s.i, l);
       const guns = gunsOf(l);
-      actors.set(s.i, { id: s.i, name: s.n, team: s.tm, bot: !!s.b, body: { x: sp.x, y: 0, z: sp.z, vy: 0 }, yaw: sp.yaw, pitch: 0, alive: true, back: 0, shield: 0, hp: RULES.hp, armour: l.armour ? RULES.armour : 0, maxArmour: l.armour ? RULES.armour : 0, crouch: false, tank: 0, bag: false, gun: guns[0], stats: newStats() });
-      sc.addActor(s.i, s.n, s.tm, s.i === me.id && !watch);
+      actors.set(s.i, { id: s.i, name: s.n, team: s.tm, bot: !!s.b, body: { x: sp.x, y: 0, z: sp.z, vy: 0 }, yaw: sp.yaw, pitch: 0, alive: true, back: 0, shield: 0, hp: RULES.hp, armour: hasArmour(s.tm, l) ? RULES.armour : 0, maxArmour: hasArmour(s.tm, l) ? RULES.armour : 0, crouch: false, tank: 0, bag: false, gun: guns[0], stats: newStats() });
+      sc.addActor(s.i, s.n, s.tm, s.i === me.id && !watch, s.a);
     }
     const mine = watch ? null : actors.get(me.id)!;
     const humans = roster.filter((s) => !s.b).map((s) => s.i);
@@ -164,10 +166,21 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
       shots.push(s);
       sc.addShot(s);
       if (kind !== "grenade") sc.flash(o);
-      const dist = Math.hypot(o.x - (mine?.body.x ?? 0), o.z - (mine?.body.z ?? 0));
-      if (owner.id === me.id) tone(kind === "rocket" || kind === "cannon" ? 70 : kind === "sniper" ? 120 : 180 + r() * 40, kind === "cannon" ? 0.25 : 0.06, kind === "shotgun" || kind === "cannon" ? "sawtooth" : "square", 0.05);
-      else if (dist < 60) tone(150 + r() * 60, 0.04, "square", 0.02 * (1 - dist / 60));
+      // One sound a shot (a shotgun's pellets fly together).
+      const now = performance.now();
+      if (now - (lastBang.get(owner.id) ?? 0) > 25) {
+        lastBang.set(owner.id, now);
+        if (kind === "grenade") {
+          if (owner.id === me.id) cue("pin");
+        } else gunshot(kind, owner.id === me.id && !watch ? null : o);
+      }
     }
+    const lastBang = new Map<string, number>();
+    /** An explosion seen and heard. */
+    const boom = (p: V3, size: number) => {
+      sc.explode(p, size);
+      explosion(p, size);
+    };
     const muzzleOf = (a: Actor): V3 => {
       if (a.tank > 0) return sc.muzzle(a.id) ?? { x: a.body.x - Math.sin(a.yaw) * 3.8, y: a.body.y + 2.4, z: a.body.z - Math.cos(a.yaw) * 3.8 };
       const y = a.body.y + (a.crouch ? 0.9 : 1.36);
@@ -215,7 +228,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
       seen.add(h);
       if (k === 99) {
         tg.tank = 0;
-        sc.explode(tg.body, 8);
+        boom(tg.body, 8);
         addFeed(`${by?.name ?? "Someone"} destroyed ${tg.name}'s tank`, by?.team ?? 0);
         if (by && by.team !== tg.team) {
           if (!by.standin) by.stats.kills += 1;
@@ -237,10 +250,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
       if (tg.id === me.id) {
         outBy = by?.name ?? "";
         playSfx("miss");
-      } else if (by?.id === me.id) {
-        tone(660, 0.12, "triangle", 0.08);
-        tone(990, 0.12, "triangle", 0.06);
-      }
+      } else if (by?.id === me.id) cue("down");
     }
     /** The loot: a bag picked up at the vault (or off the ground), dropped, banked or taken back. */
     function loot(e: "pick" | "drop" | "bank" | "return", a: Actor, b: string, x?: number, z?: number) {
@@ -325,7 +335,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
       } else if (m.t === "loot") {
         const a = actors.get(m.i);
         if (a) loot(m.e, a, m.b, m.x, m.z);
-      } else if (m.t === "boom") sc.explode(m, m.k === 6 ? 6 : 7);
+      } else if (m.t === "boom") boom(m, m.k === 6 ? RULES.grenadeSplash : m.k === 7 ? RULES.tankSplash : (GUNS.rocket.splash ?? 8));
       else if (m.t === "chat") {
         if (m.tm !== myTeam || watch) return;
         setChat((c) => [...c.slice(-5), { id: Date.now() + Math.random(), n: m.n, text: m.text.slice(0, 80), at: Date.now() }]);
@@ -455,7 +465,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
         if (s.owner === me.id) {
           hitFlash = performance.now();
           headFlash = head;
-          tone(head ? 1320 : 880, 0.05, "square", 0.05);
+          cue(head ? "head" : "hit");
         }
         sc.spark(at);
         return { done: true, boom: null };
@@ -472,7 +482,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
     /** An explosion of mine (or a bot's I run): everyone near is hurt, everyone sees it. */
     function explodeAt(s: Shot, at: V3) {
       net?.send({ t: "boom", x: Math.round(at.x * 10) / 10, y: Math.round(at.y * 10) / 10, z: Math.round(at.z * 10) / 10, k: SHOT_KINDS.indexOf(s.kind) });
-      sc.explode(at, s.kind === "grenade" ? 6 : 7);
+      boom(at, s.splash);
       const t = nowS();
       for (const o of actors.values()) {
         if (o.team === s.team || !o.alive || o.shield > t) continue;
@@ -492,7 +502,8 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
     let ended = false;
     function frame(now: number) {
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.05, (now - last) / 1000);
+      // (Never below 0: the first frame's time can be a touch before the start.)
+      const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
       last = now;
       const t = nowS();
       const live = t >= 0 && t < length && !over;
@@ -583,7 +594,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
         const gun = GUNS[mine.gun];
         if (inp.reload && mine.tank <= 0 && (mag.get(mine.gun) ?? 0) < gun.mag && t > reloadUntil && (mine.gun !== "rocket" || rockets > 0)) {
           reloadUntil = t + gun.reload;
-          playSfx("tick");
+          cue("reload");
         }
         inp.reload = false;
         if (reloadUntil && t >= reloadUntil) {
@@ -628,7 +639,10 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
             const left = (mag.get(mine.gun) ?? 1) - 1;
             mag.set(mine.gun, left);
             if (mine.gun === "rocket") rockets = Math.max(0, rockets - 1);
-            if (left <= 0 && (mine.gun !== "rocket" || rockets > 0)) reloadUntil = t + gun.reload;
+            if (left <= 0 && (mine.gun !== "rocket" || rockets > 0)) {
+              reloadUntil = t + gun.reload;
+              cue("reload");
+            }
           }
           const ray = sc.ray();
           // What the crosshair is on (a wall, the ground, or someone, with a little help on a phone).
@@ -852,6 +866,7 @@ export function Match({ me, setup, net, onQuit, onEnd }: { me: { id: string; nam
         }
       }
       sc.render(dt);
+      if (watched) listen(watched.body.x, watched.body.z, watched.yaw);
 
       // The end: time's up.
       if (!ended && (t >= length || over)) {

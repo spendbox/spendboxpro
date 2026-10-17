@@ -11,6 +11,13 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { SIDES, type GunId } from "@/lib/cops";
+import { recipeOf, type Avatar } from "@/lib/avatar";
+import { getAvatarModel } from "@/lib/avatar3d/client";
+import { LOD } from "@/lib/avatar3d/lod";
+import { makeMaterials, type MaterialSet } from "@/lib/avatar3d/materials";
+import { MOVES, applyMove } from "@/lib/avatar3d/moves";
+import { seededRecipe, type Recipe } from "@/lib/avatar3d/recipe";
+import { mountModel, type AvatarObject } from "@/lib/avatar3d/scene";
 import { HIDEOUT, HQ, MAP, ROAD_W, ROADS, VAULT, type Bag, type Block, type City, type Shape, type Shot, type V3 } from "./world";
 
 export type Tod = "day" | "dusk" | "night";
@@ -95,7 +102,27 @@ type Char = {
   tank: { root: THREE.Group; turret: THREE.Group; barrel: THREE.Object3D } | null;
   team: number;
   stride: number;
+  /** The simple figure, shown until the real avatar is ready (or if it can't be built). */
+  simple: THREE.Object3D[];
+  /** Just the guns (no arms), held by the avatar. */
+  held: Map<GunId, THREE.Mesh>;
+  /** The player's own 3D avatar in uniform, once built. */
+  av: { obj: AvatarObject; mats: MaterialSet; scale: number; floor: number; t: number } | null;
 };
+
+/**
+ * The uniforms, as avatar parts (src/lib/avatar3d/catalog.ts): police in a navy shirt and cap,
+ * dark trousers and black boots (with a vest over the top, added below); thieves in a black
+ * hoodie, joggers, dark shades and trainers (and a mask over the face). Everything else (face,
+ * skin, hair, build) is the player's own.
+ */
+const UNIFORM: Record<number, Partial<Recipe>> = {
+  0: { outfit: 0, topStyle: 7, top: 0, pattern: 0, bottomStyle: 1, bottom: 0, hw: 1, hwC: 0, layer: 0, shoes: 6, shoeC: 2, glasses: 0, chain: 0, watch: 0, ear: 0, pierce: 0 },
+  1: { outfit: 0, topStyle: 3, top: 5, pattern: 0, bottomStyle: 4, bottom: 0, hw: 0, layer: 0, shoes: 1, shoeC: 2, glasses: 3, chain: 0, watch: 0, ear: 0, pierce: 0 },
+};
+const MOVE = (id: string) => MOVES.find((m) => m.id === id) ?? MOVES[0];
+const eul = new THREE.Euler();
+const quat = new THREE.Quaternion();
 
 export type ActorView = { x: number; y: number; z: number; yaw: number; pitch: number; speed: number; alive: boolean; crouch: boolean; tank: number; bag: boolean; gun: GunId; hp: number; armour: number; shield: boolean };
 
@@ -125,6 +152,7 @@ export class CopsScene {
   private fov = 70;
   private shake = 0;
   private lit: boolean;
+  private gone = false;
   readonly low: boolean;
 
   constructor(host: HTMLElement, city: City, blocks: Block[], tod: Tod = "day", low = false) {
@@ -395,7 +423,7 @@ export class CopsScene {
 
   // ---------------------------------------------------------------- people
 
-  addActor(id: string, name: string, team: number, me: boolean) {
+  addActor(id: string, name: string, team: number, me: boolean, avatar?: unknown) {
     if (this.chars.has(id)) return;
     const root = new THREE.Group();
     const body = new THREE.Group();
@@ -443,7 +471,8 @@ export class CopsScene {
       p.add(new THREE.BoxGeometry(0.26, 0.11, 0.1), 0x222226, m4(0, 1.56, -0.11));
       p.add(new THREE.BoxGeometry(0.2, 0.025, 0.02), SIDES[1].colour, m4(0, 1.73, -0.15));
     }
-    body.add(mesh(p));
+    const torso = mesh(p);
+    body.add(torso);
     // Arms with each gun.
     const arms = new THREE.Group();
     arms.position.set(0, 1.38, 0);
@@ -458,6 +487,18 @@ export class CopsScene {
       g.visible = gun === "pistol";
       arms.add(g);
       guns.set(gun, g);
+    }
+    // The same guns alone, for the avatar's own arms to hold.
+    const held = new Map<GunId, THREE.Mesh>();
+    for (const gun of ["pistol", "smg", "shotgun", "rifle", "sniper", "rocket"] as GunId[]) {
+      const a = new Parts();
+      gunModel(gun, a);
+      const g = mesh(a);
+      g.visible = false;
+      // Up into the avatar's hands, a little in from the side.
+      g.position.set(-0.06, 0.09, 0.04);
+      arms.add(g);
+      held.set(gun, g);
     }
     // A sack of money, worn on the back while carrying.
     const bag = new THREE.Mesh(this.bagGeo, this.bagMat);
@@ -500,7 +541,92 @@ export class CopsScene {
       this.bin.push(tex, mat, btex, bmat);
     }
     this.scene.add(root);
-    this.chars.set(id, { root, body, legs: [legs[0], legs[1]], arms, guns, bag, tag, bar, tank: null, team, stride: 0 });
+    const c: Char = { root, body, legs: [legs[0], legs[1]], arms, guns, bag, tag, bar, tank: null, team, stride: 0, simple: [legs[0], legs[1], torso, ...guns.values()], held, av: null };
+    this.chars.set(id, c);
+    this.dressAvatar(c, id, team, me, avatar);
+  }
+
+  /** Builds the player's own 3D avatar in their side's uniform (in the background); it replaces the simple figure when ready. */
+  private dressAvatar(c: Char, id: string, team: number, me: boolean, avatar?: unknown) {
+    let recipe: Recipe;
+    try {
+      recipe = avatar ? recipeOf(avatar as Avatar) : seededRecipe(id);
+    } catch {
+      recipe = seededRecipe(id);
+    }
+    recipe = { ...recipe, ...UNIFORM[team] };
+    // You in full detail; everyone else in the light version (one mesh each: a full match stays smooth on a phone).
+    void getAvatarModel(recipe, me ? LOD.near : LOD.far)
+      .then((model) => {
+        if (this.gone || this.chars.get(id) !== c) return;
+        const mats = makeMaterials(recipe);
+        const obj = mountModel(model, mats);
+        const box = new THREE.Box3().setFromObject(obj.root);
+        const scale = 1.74 / Math.max(0.01, box.max.y - box.min.y);
+        obj.root.scale.setScalar(scale);
+        obj.root.position.y = -box.min.y * scale;
+        obj.root.traverse((o) => {
+          (o as THREE.Mesh).castShadow = !this.low;
+          o.frustumCulled = false;
+        });
+        // The avatar faces +z; everyone here faces -z.
+        const wrap = new THREE.Group();
+        wrap.rotation.y = Math.PI;
+        wrap.add(obj.root);
+        c.body.add(wrap);
+        this.kit(c, obj, team, scale);
+        for (const o of c.simple) o.visible = false;
+        c.av = { obj, mats, scale, floor: box.min.y, t: 0 };
+      })
+      .catch(() => {
+        // The simple figure stays.
+      });
+  }
+
+  /** The kit over the uniform: a police vest (POLICE on the back), or a thief's mask. */
+  private kit(c: Char, obj: AvatarObject, team: number, scale: number) {
+    const chest = obj.nodes.chest;
+    const head = obj.nodes.head ?? obj.nodes.skull;
+    const u = 1 / scale;
+    if (team === 0 && chest) {
+      const vest = new THREE.Group();
+      const geo = new RoundedBoxGeometry(0.4 * u, 0.36 * u, 0.25 * u, 3, 0.07 * u);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
+      const v = new THREE.Mesh(geo, mat);
+      vest.add(v);
+      const tex = canvasTex(256, 96, (g) => {
+        g.fillStyle = "#111827";
+        g.fillRect(0, 0, 256, 96);
+        g.fillStyle = "#ffffff";
+        g.font = "900 54px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText("POLICE", 128, 52);
+      });
+      const label = new THREE.MeshBasicMaterial({ map: tex });
+      const pgeo = new THREE.PlaneGeometry(0.34 * u, 0.12 * u);
+      const back = new THREE.Mesh(pgeo, label);
+      back.position.set(0, 0.04 * u, -0.127 * u);
+      back.rotation.y = Math.PI;
+      const front = new THREE.Mesh(pgeo, label);
+      front.position.set(0, 0.07 * u, 0.127 * u);
+      front.scale.setScalar(0.6);
+      vest.add(back, front);
+      vest.position.set(0, -0.06 * u, 0.0);
+      chest.add(vest);
+      this.bin.push(geo, mat, tex, label, pgeo);
+    }
+    if (team === 1 && head) {
+      // A dark mask over the lower face.
+      const geo = new THREE.SphereGeometry(0.105 * u, 16, 10, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.45);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 });
+      const m = new THREE.Mesh(geo, mat);
+      m.scale.set(1, 1.05, 1.08);
+      m.position.set(0, 0.05 * u, 0.012 * u);
+      head.add(m);
+      this.bin.push(geo, mat);
+    }
+    void c;
   }
 
   private makeTank(c: Char) {
@@ -561,6 +687,13 @@ export class CopsScene {
     }
     if (inTank) return;
     c.arms.rotation.x = v.pitch * 0.9;
+    if (c.av) {
+      this.poseAvatar(c, v, dt);
+      c.body.visible = !v.shield || Math.floor(performance.now() / 120) % 2 === 0;
+      if (c.tag) c.tag.position.y = v.crouch ? 1.6 : 2.2;
+      this.drawBar(c, v);
+      return;
+    }
     for (const [g, m] of c.guns) m.visible = g === v.gun;
     c.bag.visible = v.bag;
     c.stride += v.speed * dt * 2.2;
@@ -577,8 +710,52 @@ export class CopsScene {
     }
     c.body.visible = !v.shield || Math.floor(performance.now() / 120) % 2 === 0;
     if (c.tag) c.tag.position.y = v.crouch ? 1.8 : 2.25;
+    this.drawBar(c, v);
+  }
+
+  /** The avatar walking, running, standing or crouching, holding its gun up where it aims. */
+  private poseAvatar(c: Char, v: ActorView, dt: number) {
+    const a = c.av!;
+    for (const [g, m] of c.held) m.visible = g === v.gun;
+    c.bag.visible = v.bag;
+    c.body.position.y = 0;
+    const run = v.speed > 4.2;
+    const move = v.crouch ? MOVE("sit") : MOVE(run ? "run" : v.speed > 0.4 ? "walk" : "idle");
+    // Feet keep up with the ground (a move's own speed is in the avatar's units).
+    a.t += move.speed > 0 ? (dt * v.speed) / (move.speed * a.scale) : dt;
+    const nodes = a.obj.nodes;
+    applyMove(nodes, a.obj.rest, move, a.t, a.obj.stride, v.crouch ? { seat: 0.5 / a.scale + a.floor } : undefined);
+    // Both arms up on the gun, raised and lowered with the aim.
+    const p = Math.max(-0.8, Math.min(0.8, v.pitch));
+    const set = (id: string, x: number, y: number, z: number) => {
+      const b = nodes[id];
+      const r = a.obj.rest.get(id);
+      if (!b || !r) return;
+      b.quaternion.copy(r.q).multiply(quat.setFromEuler(eul.set(x, y, z, "YXZ")));
+    };
+    // (x: forward and up; z: the right arm in is +, the left arm in is -.)
+    if (v.gun === "rocket") {
+      set("upperArm0", -0.65 - p * 0.5, 0, -0.15);
+      set("forearm0", -1.55, 0, 0);
+      set("upperArm1", -1.2 - p * 0.9, 0, -0.4);
+      set("forearm1", -0.6, 0, 0);
+    } else if (v.gun === "pistol") {
+      set("upperArm0", -1.45 - p, 0, 0.2);
+      set("forearm0", -0.12, 0, 0);
+      set("upperArm1", -1.4 - p, 0, -0.42);
+      set("forearm1", -0.18, 0, 0);
+    } else {
+      set("upperArm0", -1.2 - p * 0.9, 0, 0.18);
+      set("forearm0", -0.5, 0, 0);
+      set("upperArm1", -1.35 - p * 0.9, 0, -0.45);
+      set("forearm1", -0.25, 0, 0);
+    }
+  }
+
+  /** Health and armour over someone's head (redrawn only when they change). */
+  private drawBar(c: Char, v: ActorView) {
     if (c.bar) {
-      c.bar.sprite.position.y = v.crouch ? 1.58 : 2.0;
+      c.bar.sprite.position.y = v.crouch ? 1.4 : 2.0;
       const key = `${Math.round(v.hp / 5)}|${Math.round(v.armour / 5)}`;
       if (key !== c.bar.key) {
         c.bar.key = key;
@@ -868,6 +1045,8 @@ export class CopsScene {
   }
 
   dispose() {
+    this.gone = true;
+    for (const c of this.chars.values()) c.av?.mats.dispose();
     for (const d of this.bin) d.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

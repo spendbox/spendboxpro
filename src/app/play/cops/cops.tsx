@@ -21,7 +21,7 @@ import { Match, type EndResult, type Setup } from "./match";
 // match that's on. The end: the last moment captured, with the leaderboard over it.
 
 const GAME = "cops-robbers";
-type Me = { id: string; name: string };
+type Me = { id: string; name: string; avatar?: unknown };
 /** sample: the code of the friends' room a sample game is played from (null: alone, or the real game). */
 type Screen = { k: "lobby" } | { k: "room" } | { k: "play"; setup: Setup; live: boolean; sample: boolean } | { k: "done"; result: EndResult; setup: Setup; live: boolean; sample: boolean };
 const TODS = ["day", "dusk", "night"] as const;
@@ -29,7 +29,7 @@ const TODS = ["day", "dusk", "night"] as const;
 /** A sample game alone against bots: 5 minutes, a random city and time of day, every weapon. */
 function soloSample(p: Me, tm: number): Setup {
   const t = Date.now();
-  return { key: null, room: 0, seed: Math.floor(Math.random() * 1e9), fightAt: t + 5000, endsAt: t + 5000 + 300_000, roster: [{ i: p.id, n: p.name, tm, g: PRACTICE_LOADOUT }], tod: TODS[Math.floor(Math.random() * 3)], watch: false, pool: 0 };
+  return { key: null, room: 0, seed: Math.floor(Math.random() * 1e9), fightAt: t + 5000, endsAt: t + 5000 + 300_000, roster: [{ i: p.id, n: p.name, tm, g: PRACTICE_LOADOUT, a: p.avatar }], tod: TODS[Math.floor(Math.random() * 3)], watch: false, pool: 0 };
 }
 
 const GEAR_ICON: Record<GearId, React.ComponentType<{ className?: string }>> = { smg: Crosshair, shotgun: Crosshair, rifle: Crosshair, sniper: Crosshair, rocket: Swords, grenade: Bomb, medkit: HeartPulse, armour: Shield, tank: Truck };
@@ -45,6 +45,7 @@ function useNow() {
 }
 
 export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () => void; demo?: CopsStatus }) {
+  const meAvatar = me?.avatar;
   const router = useRouter();
   const now = useNow();
   const { live, next } = sessionsNow(GAME, now);
@@ -55,7 +56,7 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
   const [screen, setScreen] = useState<Screen>({ k: "lobby" });
   const meId = me?.id ?? null;
   const meName = me?.name ?? "Player";
-  const who = useMemo(() => (meId ? { id: meId, name: meName } : null), [meId, meName]);
+  const who = useMemo(() => (meId ? { id: meId, name: meName, avatar: meAvatar } : null), [meId, meName, meAvatar]);
   // Sample games need no sign-in: someone who isn't signed in plays as a guest.
   const [guest] = useState(() => ({ id: crypto.randomUUID(), name: "Guest" }));
   const player = who ?? guest;
@@ -309,7 +310,7 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
                     <LogOut className="size-4" /> Pull out
                   </button>
                 </div>
-                <Armoury gear={nextMe.gear ?? {}} busy={busy} buy={(id) => void act(`buy:${id}`, () => copsBuy(next.key, id, 1))} />
+                <Armoury side={side} gear={nextMe.gear ?? {}} busy={busy} buy={(id) => void act(`buy:${id}`, () => copsBuy(next.key, id, 1))} />
               </>
             )}
           </div>
@@ -328,15 +329,15 @@ export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () 
 
 // ---------------------------------------------------------------- the shop
 
-function Armoury({ gear, busy, buy }: { gear: Loadout; busy: string | null; buy: (id: GearId) => void }) {
+function Armoury({ side, gear, busy, buy }: { side: number; gear: Loadout; busy: string | null; buy: (id: GearId) => void }) {
   return (
     <div className="space-y-2">
       <p className="flex items-center gap-2 text-xs font-black tracking-[0.2em] text-white/60">
         <ShoppingCart className="size-4" /> THE ARMOURY · BUY BEFORE THE START
       </p>
-      <p className="text-xs text-white/55">You always have a pistol. Everything else you buy here is yours for this game.</p>
+      <p className="text-xs text-white/55">You always have a pistol{side === 0 ? " and body armour (police get it free)" : ""}. Everything else you buy here is yours for this game.</p>
       <div className="grid grid-cols-2 gap-2">
-        {GEAR.map((g) => {
+        {GEAR.filter((g) => !(side === 0 && g.id === "armour")).map((g) => {
           const have = gear[g.id] ?? 0;
           const full = have >= g.max;
           const Icon = GEAR_ICON[g.id];
@@ -436,7 +437,7 @@ function SampleRoom({ me, net, code, onLeave, onStart }: { me: Me; net: CopsNet;
   function start() {
     if (started.current) return;
     const at = Date.now() + 6000;
-    const msg: Extract<Msg, { t: "start" }> = { t: "start", seed: Math.floor(Math.random() * 1e9), at, ends: at + mins * 60_000, tod: TODS[Math.floor(Math.random() * 3)], roster: people.slice(0, 16).map((p, k) => ({ i: p.id, n: p.name, tm: k % 2 })) };
+    const msg: Extract<Msg, { t: "start" }> = { t: "start", seed: Math.floor(Math.random() * 1e9), at, ends: at + mins * 60_000, tod: TODS[Math.floor(Math.random() * 3)], roster: people.slice(0, 16).map((p, k) => ({ i: p.id, n: p.name, tm: k % 2, a: p.id === me.id ? me.avatar : p.av })) };
     net.send(msg);
     started.current = true;
     onStart(setupOf(msg));

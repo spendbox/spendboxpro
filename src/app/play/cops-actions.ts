@@ -112,7 +112,8 @@ export async function copsLeave(key: string): Promise<{ ok: true } | Fail> {
   return { ok: true };
 }
 
-export type RosterSeat = { i: string; n: string; tm: number; g: Loadout };
+/** a: the player's own avatar (worn in their side's uniform). */
+export type RosterSeat = { i: string; n: string; tm: number; g: Loadout; a?: unknown };
 export type CopsResult = { w: number; pool: number; jackpot: boolean; rows: BoardRow[] };
 export type CopsRoom = {
   ok: true;
@@ -151,7 +152,7 @@ export async function copsRoom(key: string, room: number | null = null): Promise
     done: !!d.done,
     result: (d.result ?? null) as CopsResult | null,
     me: mine(d.me),
-    roster: ((d.roster ?? []) as RosterSeat[]).map((r) => ({ i: String(r.i), n: String(r.n).slice(0, 24), tm: n(r.tm), g: (r.g ?? {}) as Loadout })),
+    roster: ((d.roster ?? []) as RosterSeat[]).map((r) => ({ i: String(r.i), n: String(r.n).slice(0, 24), tm: n(r.tm), g: (r.g ?? {}) as Loadout, a: r.a ?? undefined })),
   };
 }
 

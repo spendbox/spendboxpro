@@ -4,6 +4,9 @@
 import type { RewardGame } from "../activity-actions";
 
 /** What the 3D view says was tapped inside a place. */
+/** Robbing the bank (the vault in banks, the heist) is switched off for now. */
+export const BANK_ROBBERY = false;
+
 export type ActivityKind =
   | "seat"
   | "darts"
