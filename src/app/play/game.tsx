@@ -107,7 +107,7 @@ import { closePhoneNotices, setPhoneBadge } from "./phone/phone-notices";
 import { signOutNow } from "../login/actions";
 import { claimBalloon, recordVisit } from "./profile-actions";
 import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-actions";
-import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
+import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, gameFeeMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
 import { rideRoom, useRooms, type RoomInfo } from "./rooms";
@@ -731,7 +731,7 @@ export function Game({
   const [dancing, setDancing] = useState<{ move: DanceMove; with: string | null } | null>(null);
   const [pickPlace, setPickPlace] = useState<PlaceRoom | null>(null);
   /** The minigames: open (maybe straight into a game, or a challenge you accepted), or closed. */
-  const [gamesOpen, setGamesOpen] = useState<{ game?: string; invite?: Invite | null } | null>(null);
+  const [gamesOpen, setGamesOpen] = useState<{ game?: string; invite?: Invite | null; only?: boolean } | null>(null);
   /** Jobs: at this place (apply), null (My job), or closed (undefined). */
   const [jobsAt, setJobsAt] = useState<{ id: string; name: string } | null | undefined>(undefined);
   const [placeRoom, setPlaceRoom] = useState<PlaceRoom | null>(null);
@@ -2122,12 +2122,13 @@ export function Game({
       case "skybridge":
       case "clockroom":
       case "park":
+      case "amusement":
       case "plaza":
       case "roofTerrace":
       case "poolDeck":
         return { label: "Take a photo", icon: Camera, run: () => setCamera("photo") };
       case "range":
-        return { label: "Shoot at the range", icon: Crosshair, run: () => setGamesOpen({ game: "shooting-range" }) };
+        return { label: `Shoot at the range · ${cash(gameFeeMint("shooting-range", worldRegion?.prices.perMint))}`, icon: Crosshair, run: () => setGamesOpen({ game: "shooting-range", only: true }) };
       case "market":
         return { label: "Shop at the stalls", icon: ShoppingBag, run: () => worldLife.openThings("shops", "market") };
     }
@@ -2957,7 +2958,7 @@ export function Game({
           ctx={playCtx}
           placeType={ride !== null ? ride.kind : (placeRoom?.type ?? null)}
           placeName={ride !== null || place ? (rooms.myRoomInfo?.name ?? placeRoom?.name ?? null) : null}
-          open={gamesOpen.game ? { game: gamesOpen.game, invite: gamesOpen.invite } : null}
+          open={gamesOpen.game ? { game: gamesOpen.game, invite: gamesOpen.invite, only: gamesOpen.only } : null}
           onClose={() => setGamesOpen(null)}
         />
       )}

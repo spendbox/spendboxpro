@@ -79,6 +79,8 @@ export type Theme =
   | "rigDeck"
   // open air at street level
   | "park"
+  // a park you go into: a whole amusement park (rides, stalls, crowds) inside a ring of trees
+  | "amusement"
   | "plaza"
   | "woods"
   | "pond"
@@ -408,7 +410,7 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("o", "At the wheel", "outdoor", "ferris", x + 0.3, 0.08, z - 0.3, 0.1, 0.1);
       break;
     case "park":
-      R("o", "In the park", "outdoor", "park", x, 0.08, z, 0.1, 0.1);
+      R("o", "In the park", "outdoor", "amusement", x, 0.08, z, 0.1, 0.1);
       break;
     case "plaza":
       R("o", "On the plaza", "outdoor", "plaza", x + 0.28, 0.1, z + 0.28, 0.08, 0.08);
@@ -589,7 +591,7 @@ function structureLevels(t: Tile, type: StructureType, plan: CityPlan): Draft[] 
       R("f1", "The vault", "interior", "vault", X, 0.21, Z - 0.9, 0.6, 0.2, { weight: 0.7 });
       break;
     case "bigpark":
-      R("o", "In the park", "outdoor", "park", X, 0.09, Z + 0.3, 0.1, 0.1, { weight: 1.6 });
+      R("o", "In the park", "outdoor", "amusement", X, 0.09, Z + 0.3, 0.1, 0.1, { weight: 1.6 });
       break;
     case "gym":
       R("g", "Gym floor", "interior", "gym", X, 0.09, Z - 0.4, 1.1, 0.65, { weight: 1.4 });

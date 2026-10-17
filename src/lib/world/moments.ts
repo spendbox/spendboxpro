@@ -1118,6 +1118,7 @@ export function spotOfTheme(theme: string | null | undefined, home: boolean): Mo
     case "mosque":
       return "worship";
     case "park":
+    case "amusement":
     case "plaza":
     case "woods":
     case "pond":

@@ -49,6 +49,7 @@ import { createBuildingSite, createSites } from "./city/construction";
 import { createFigures, type Figures, type Person, type Spot } from "./city/figures";
 import { createGroundsWalker, createInteractables, createWalker, type Interactables, type Item } from "./city/interact";
 import { coolingTowerGeometry, createPlumes, industryParts } from "./city/industry";
+import { createAmusementPark } from "./city/amusement";
 import { createInterior, type Interior, type RoomItem } from "./city/interiors";
 import { disposeBlobTexture, disposeKitCaches, rngFrom } from "./city/kit";
 import { clubBeat, type DanceMove } from "./city/dance-moves";
@@ -997,6 +998,28 @@ function basePartsFor(t: Tile, plan: CityPlan, add: (mesh: string, p: Omit<Part,
         tree(Math.cos(a) * 0.28, Math.sin(a) * 0.28, 0.7 + ((r[3] * (k + 1)) % 0.4), (r[0] + k * 0.37) % 1);
       }
       add("disc", { x, y: 0.08, z, sx: 0.32, sy: 0.01, sz: 0.32, ry: 0, color: 0xe9dcc3 });
+      // Parks are fun parks: a ride or a stall on each (go in for the whole amusement park).
+      const fun = [0xff6b6b, 0xffd43b, 0x4dabf7, 0xda77f2, 0x69db7c][Math.floor(r[2] * 5)];
+      const ride = Math.floor(r[3] * 4);
+      if (ride === 0) {
+        // A carousel: a striped canopy on a pole.
+        B(0, 0.08, 0, 0.36, 0.03, 0.36, 0xf8f0e3, 0, "cyl");
+        B(0, 0.11, 0, 0.04, 0.22, 0.04, 0xffd43b, 0, "cyl");
+        B(0, 0.33, 0, 0.42, 0.14, 0.42, fun, 0, "cone");
+      } else if (ride === 1) {
+        // A swing ride: a tall pole, the turning top.
+        B(0, 0.08, 0, 0.05, 0.6, 0.05, 0xdee2e6, 0, "cyl");
+        B(0, 0.62, 0, 0.36, 0.06, 0.36, fun, 0, "cyl");
+        B(0, 0.68, 0, 0.12, 0.08, 0.12, 0xffd43b, 0, "cone");
+      } else if (ride === 2) {
+        // A bouncy castle.
+        B(0, 0.08, 0, 0.3, 0.12, 0.3, fun);
+        for (const [cx, cz] of [[-0.13, -0.13], [0.13, -0.13], [-0.13, 0.13], [0.13, 0.13]]) B(cx, 0.08, cz, 0.06, 0.2, 0.06, 0xffffff, 0, "cyl");
+      } else {
+        // A food stall with a striped awning.
+        B(0, 0.08, 0, 0.22, 0.1, 0.12, 0xfff3bf);
+        B(0, 0.2, 0, 0.26, 0.02, 0.16, fun);
+      }
       break;
     }
     case "trees":
@@ -5754,7 +5777,39 @@ export function CityView({
         camAt: null,
         free: [],
       };
-      if (lvl.kind === "interior") {
+      if (lvl.theme === "amusement") {
+        // A park: a whole amusement park, drawn over the city like a room (with its own sky).
+        const street = addressOf(plan, anchor).replace(/^\d+\s+/, "").split(" ").slice(0, -1).join(" ") || plan.city.name;
+        const fair = createAmusementPark(key, anchor.structure?.name ?? anchor.name ?? `${street} Fun Park`);
+        const figures = createFigures(npcs, fair.spots, { key, tags: true });
+        st.holder.add(fair.group, figures.group);
+        const rot = cameraYaw() - fair.views[0].yaw;
+        st.holder.rotation.y = rot;
+        st.scene = new THREE.Scene();
+        st.scene.add(st.holder);
+        st.unit = (Math.min(lvl.hw, lvl.hd) * 0.85) / (Math.max(fair.w, fair.d) / 2);
+        st.views = fair.views.map((v) => {
+          const e = tmpV.set(v.x, 0, v.z).applyAxisAngle(up, rot);
+          return { p: new THREE.Vector3(st.origin.x + e.x * st.unit, st.origin.y, st.origin.z + e.z * st.unit), yaw: v.yaw + rot, pitch: v.pitch, lx: v.x, lz: v.z };
+        });
+        st.interior = fair;
+        st.figures = figures;
+        st.npc3d = upgradeNpcs(figures.figs, npcs, { max: 30 });
+        fair.setNight(carNight);
+        st.update = fair.update;
+        setupUse(st, fair.seats, fair.items, fair.spots, npcs.length);
+        // A crowd of day-trippers (the last of the spots: players here stand in the first ones).
+        const around = fair.spots.slice(Math.max(npcs.length + 12, fair.spots.length - 56));
+        const people: Person[] = around.map((_, i) => ({ id: `crowd:${i}`, name: "", avatar: defaultAvatar(`${key}|crowd|${i}`), npc: false }));
+        if (people.length) {
+          st.crowd = createFigures(people, around.map((sp) => ({ ...sp, act: "talk" as const })), { key, inert: true, tags: false });
+          st.holder.add(st.crowd.group);
+          st.crowd3d = upgradeNpcs(st.crowd.figs, people, { players: true, level: LOD.far });
+        }
+        // The grounds are big and open: walk anywhere inside the fence.
+        st.walker = createGroundsWalker(-fair.w / 2 + 2, fair.w / 2 - 2, -fair.d / 2 + 2, fair.d / 2 - 2);
+        st.poles = [];
+      } else if (lvl.kind === "interior") {
         const homeLevel = homeFloor.get(anchor.i) ?? 0;
         if (homePlan) st.homeKey = `${JSON.stringify(homePlan)}#${homeLevel}`;
         const interior = homePlan ? createHomeInterior(homePlan, homeLevel, building) : createInterior({

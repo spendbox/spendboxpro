@@ -75,3 +75,26 @@ export function clubEntryMint(place: string, type?: string, nairaPerMint = 1_500
 }
 /** How long a club's entry lasts once paid. */
 export const CLUB_ENTRY_MS = 24 * 3_600_000;
+
+/**
+ * Playing a game (Games, the shooting range, paintball, a board game against someone): every go
+ * costs money, at real Lagos prices (naira). Games never pay money out. A heist step or a job
+ * shift is free (it's part of something else). The database takes up to ₥20 a game
+ * (game-db/121_games_cost.sql).
+ */
+const GAME_FEE_NAIRA: Record<string, number> = {
+  "shooting-range": 5_000,
+  paintball: 5_000,
+  chess: 2_000,
+  draughts: 2_000,
+  poker: 3_000,
+  blackjack: 3_000,
+};
+const GAME_FEE_DEFAULT_NAIRA = 1_000;
+export function gameFeeNaira(game: string) {
+  return everyday(GAME_FEE_NAIRA[game] ?? GAME_FEE_DEFAULT_NAIRA);
+}
+/** The same in mint. */
+export function gameFeeMint(game: string, nairaPerMint = 1_500) {
+  return Math.round((gameFeeNaira(game) / nairaPerMint) * 100) / 100;
+}

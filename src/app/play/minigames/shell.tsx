@@ -1,12 +1,10 @@
 "use client";
 
-import { cash } from "@/lib/world/value";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, Coins, LoaderCircle, Medal, Minus, Play, Plus, RotateCcw, Smartphone, Swords, Trophy, UserRound, Users, X } from "lucide-react";
+import { Bot, LoaderCircle, Medal, Minus, Play, Plus, RotateCcw, Smartphone, Swords, Trophy, UserRound, Users, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { short } from "@/lib/format";
-import { claimMinigameReward } from "../minigame-actions";
 import { playSfx } from "../sound";
 import { randomId, useActivityRoom, type ActivityMsg, type ActivityPlayer } from "../activities/hub";
 import { questEvent } from "../activities/quest-store";
@@ -18,13 +16,15 @@ import { gradeOf } from "./registry";
 import { newSeed } from "./rng";
 import { TurnResult, TurnTable, type Seat } from "./turn-table";
 import { CATEGORIES, type MiniGameDef } from "./types";
+import { FeeLine, Paying, usePlayFee } from "./fee";
 
 // Where every minigame is played. Score games: play alone, take turns with friends on this
 // phone, or challenge someone in the same place (you both get the same game; the best score
 // wins). Board and card games: against bots, pass and play on this phone, or against someone
-// here on their own phone (with bots in any empty seats). Good scores earn a little mint.
+// here on their own phone (with bots in any empty seats). Every go costs a small fee
+// (./fee); games never pay out.
 // `task` runs a game for something else (a heist step, a job shift): just one solo go, then
-// the score goes back.
+// the score goes back (free: it's part of something else).
 
 /** Where you're playing: the round and place (for the room's channel), you, and who's here. */
 export type PlayCtx = { roundId: number | null; roomId: string | null; me: ActivityPlayer | null; members: RoomMember[] };
@@ -71,14 +71,7 @@ const roomOf = (ctx: PlayCtx) => ctx.roomId ?? "arcade";
 
 export function MiniGamePlayer({ def, ctx, onClose, invite, task }: { def: MiniGameDef; ctx: PlayCtx; onClose: () => void; invite?: Invite | null; task?: Task | null }) {
   const gp: GameProps = { roundId: ctx.roundId, roomId: roomOf(ctx), me: ctx.me, members: ctx.members, label: CATEGORIES[def.cat].label, onClose };
-  if (def.legacy) {
-    return (
-      <>
-        <ActivityStyles />
-        <LegacyGame name={def.engine.replace("legacy:", "")} gp={gp} />
-      </>
-    );
-  }
+  if (def.legacy) return <LegacyPlay def={def} ctx={ctx} gp={gp} />;
   return (
     <div className="space-y-3">
       <ActivityStyles />
@@ -146,30 +139,40 @@ function ChallengePicker({ ctx, game, onPick, onBack }: { ctx: PlayCtx; game: st
   );
 }
 
-// ---------------------------------------------------------------- rewards
+// ---------------------------------------------------------------- the fee
 
-function useReward(def: MiniGameDef, signedIn: boolean) {
-  const [note, setNote] = useState<{ text: string; coins: number } | null>(null);
-  async function claim(score: number, grade: number, won?: boolean) {
-    questEvent({ type: "play", game: def.id, score, won });
-    if (grade < 1) return setNote(null);
-    if (!signedIn) return setNote({ text: "Sign in to win money for scores like that.", coins: 0 });
-    setNote({ text: "Collecting your winnings…", coins: 0 });
-    const res = await claimMinigameReward(def.id, grade).catch(() => ({ ok: false as const, error: "The connection blinked." }));
-    if (!res.ok) return setNote({ text: res.error, coins: 0 });
-    if (res.coins > 0) return setNote({ text: `+${cash(res.coins)}!${res.leftToday === 0 ? " That's all the game winnings for today." : ""}`, coins: res.coins });
-    setNote({ text: res.reason === "daily_limit" ? "You've won all the game money for today. Playing is still fun!" : "Games pay once a minute each, so this one's for glory.", coins: 0 });
+/** The older games bring their own screens: pay once to sit down at them. */
+function LegacyPlay({ def, ctx, gp }: { def: MiniGameDef; ctx: PlayCtx; gp: GameProps }) {
+  const fee = usePlayFee(def.id, !!ctx.me);
+  const [paid, setPaid] = useState(false);
+  if (paid) {
+    return (
+      <>
+        <ActivityStyles />
+        <LegacyGame name={def.engine.replace("legacy:", "")} gp={gp} />
+      </>
+    );
   }
-  return { note, claim, reset: () => setNote(null) };
-}
-
-function RewardLine({ note }: { note: { text: string; coins: number } | null }) {
-  if (!note) return null;
   return (
-    <p className={cn("act-pop flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold", note.coins > 0 ? "bg-gold/30" : "bg-panel-2 text-muted")}>
-      {note.coins > 0 && <Coins className="size-4 text-gold-dark" />}
-      {note.text}
-    </p>
+    <div className="space-y-3">
+      <div className="flex items-start gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl text-white shadow-sm" style={{ background: def.colour }}>
+          <GameIcon name={def.icon} className="size-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate font-display text-xl font-bold leading-tight">{def.title}</h2>
+          <p className="truncate text-sm text-muted">{def.blurb}</p>
+        </div>
+        <button onClick={gp.onClose} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close">
+          <X className="size-5" />
+        </button>
+      </div>
+      <p className="rounded-2xl bg-panel-2 p-3 text-sm">{def.how}</p>
+      <button disabled={fee.busy} onClick={() => void fee.pay().then((ok) => ok && setPaid(true))} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-me py-3 font-semibold text-white disabled:opacity-60">
+        {fee.busy ? <LoaderCircle className="size-4 animate-spin" /> : <Play className="size-4" />} Play
+      </button>
+      <FeeLine fee={fee.fee} error={fee.error} />
+    </div>
   );
 }
 
@@ -222,11 +225,14 @@ type ScorePhase =
   | { k: "pass"; seed: number; who: number }
   | { k: "result"; seed: number }
   | { k: "inviting"; cid: string; them: ActivityPlayer; seed: number }
-  | { k: "declined"; them: ActivityPlayer };
+  | { k: "declined"; them: ActivityPlayer }
+  | { k: "paying"; then: ScorePhase; cid?: string };
 
 function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: PlayCtx; gp: GameProps; invite: Invite | null; task: Task | null }) {
   const Engine = ENGINES[def.engine];
-  const [phase, setPhase] = useState<ScorePhase>(() => (invite ? { k: "count", seed: invite.seed, who: 0 } : task ? { k: "count", seed: newSeed(), who: 0 } : { k: "menu" }));
+  const [phase, setPhase] = useState<ScorePhase>(() =>
+    invite ? { k: "paying", then: { k: "count", seed: invite.seed, who: 0 }, cid: invite.cid } : task ? { k: "count", seed: newSeed(), who: 0 } : { k: "menu" },
+  );
   /** Players taking turns on this phone (one: just you). */
   const [players, setPlayers] = useState<string[]>([ctx.me?.name ?? "You"]);
   const [scores, setScores] = useState<(number | null)[]>([]);
@@ -235,7 +241,7 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
     invite ? { cid: invite.cid, them: invite.from, mine: null, theirs: null } : null,
   );
   const board = useScoreBoard(gp, `mg:${def.id}`, !!def.lowerWins);
-  const reward = useReward(def, !!ctx.me);
+  const fee = usePlayFee(def.id, !!ctx.me);
   const better = (a: number, b: number) => (def.lowerWins ? a < b : a > b);
 
   const room = useChallengeRoom(ctx, (m) => {
@@ -245,7 +251,7 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
     if (m.t === "mg_reply" && phase.k === "inviting" && m.from.id === phase.them.id) {
       if (m.ok) {
         setDuel({ cid, them: phase.them, mine: null, theirs: null });
-        setPhase({ k: "count", seed: phase.seed, who: 0 });
+        setPhase({ k: "paying", then: { k: "count", seed: phase.seed, who: 0 }, cid });
       } else setPhase({ k: "declined", them: phase.them });
     }
     if (m.t === "mg_score" && duel && m.from === duel.them.id && typeof m.score === "number") setDuel((d) => (d ? { ...d, theirs: m.score } : d));
@@ -270,8 +276,7 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
     const seed = newSeed();
     setScores(Array(n).fill(null));
     setDuel(null);
-    reward.reset();
-    setPhase({ k: "count", seed, who: 0 });
+    setPhase({ k: "paying", then: { k: "count", seed, who: 0 } });
   }
 
   function ended(score: number) {
@@ -290,10 +295,25 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
       board.post(score);
       const grade = gradeOf(def, score);
       if (task) return;
-      void reward.claim(score, grade, duel ? undefined : grade > 0);
+      questEvent({ type: "play", game: def.id, score, won: duel ? undefined : grade > 0 });
     }
   }
 
+  if (phase.k === "paying") {
+    const { then, cid } = phase;
+    return (
+      <Paying
+        fee={fee.fee}
+        pay={fee.pay}
+        onPaid={() => setPhase(then)}
+        onFailed={() => {
+          if (cid && ctx.me) room.send({ t: "mg_quit", cid, from: ctx.me.id });
+          setDuel(null);
+          setPhase({ k: "menu" });
+        }}
+      />
+    );
+  }
   if (phase.k === "count") return <Countdown onDone={() => setPhase({ k: "play", seed: phase.seed, who: phase.who })} />;
   if (phase.k === "play") return Engine ? <Engine key={`${phase.seed}:${phase.who}`} def={def} cfg={def.cfg ?? {}} seed={phase.seed} onEnd={ended} /> : <p>Missing game.</p>;
 
@@ -451,7 +471,6 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
             ))}
           </ol>
         )}
-        <RewardLine note={reward.note} />
         <div className="flex gap-2">
           <button onClick={() => (duel ? setPhase({ k: "menu" }) : start(players.length))} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink py-3 font-semibold text-white">
             <RotateCcw className="size-4" /> {duel ? "Done" : "Play again"}
@@ -483,9 +502,7 @@ function ScorePlay({ def, ctx, gp, invite, task }: { def: MiniGameDef; ctx: Play
           <Swords className="size-4" /> Challenge
         </button>
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-muted">
-        <Coins className="size-3.5 text-gold-dark" /> Medal scores win {cash(2)} / {cash(4)} / {cash(6)} (10 rewarded games a day).
-      </p>
+      <FeeLine fee={fee.fee} error={fee.error} />
       <Leaderboard entries={board.entries} meId={ctx.me?.id} unit={def.unit} />
     </div>
   );
@@ -499,7 +516,8 @@ type TurnPhase =
   | { k: "inviting"; cid: string; them: ActivityPlayer; seed: number; seats: number }
   | { k: "declined"; them: ActivityPlayer }
   | { k: "play"; seed: number; seats: Seat[]; cid: string | null }
-  | { k: "over"; won: boolean; draw: boolean; winners: string[]; again: () => void };
+  | { k: "over"; won: boolean; draw: boolean; winners: string[]; again: () => void }
+  | { k: "paying"; then: TurnPhase; cid?: string };
 
 function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite: Invite | null }) {
   const [min, max] = def.seats ?? [2, 2];
@@ -508,21 +526,25 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
   const bots = (from: number, n: number) => Array.from({ length: n }, (_, i): Seat => ({ kind: "bot", name: `Bot ${from + i}` }));
   const [phase, setPhase] = useState<TurnPhase>(() =>
     invite
-      ? { k: "play", seed: invite.seed, cid: invite.cid, seats: [{ kind: "remote", name: invite.from.name }, { kind: "me", name: me }, ...bots(1, Math.max(0, (invite.seats ?? 2) - 2))] }
+      ? {
+          k: "paying",
+          cid: invite.cid,
+          then: { k: "play", seed: invite.seed, cid: invite.cid, seats: [{ kind: "remote", name: invite.from.name }, { kind: "me", name: me }, ...bots(1, Math.max(0, (invite.seats ?? 2) - 2))] },
+        }
       : { k: "menu" },
   );
   const [opponent, setOpponent] = useState<ActivityPlayer | null>(invite?.from ?? null);
   const [left, setLeft] = useState(false);
-  const reward = useReward(def, !!ctx.me);
+  const fee = usePlayFee(def.id, !!ctx.me);
   const inbox = useRef<((m: ActivityMsg) => void) | null>(null);
-  const cid = phase.k === "play" ? phase.cid : phase.k === "inviting" ? phase.cid : null;
+  const cid = phase.k === "play" ? phase.cid : phase.k === "inviting" ? phase.cid : phase.k === "paying" ? (phase.cid ?? null) : null;
 
   const room = useChallengeRoom(ctx, (m) => {
     if (!cid || !("cid" in m) || m.cid !== cid) return;
     if (m.t === "mg_reply" && phase.k === "inviting" && m.from.id === phase.them.id) {
       if (!m.ok) return setPhase({ k: "declined", them: phase.them });
       setOpponent(phase.them);
-      setPhase({ k: "play", seed: phase.seed, cid, seats: [{ kind: "me", name: me }, { kind: "remote", name: phase.them.name }, ...bots(1, phase.seats - 2)] });
+      setPhase({ k: "paying", cid, then: { k: "play", seed: phase.seed, cid, seats: [{ kind: "me", name: me }, { kind: "remote", name: phase.them.name }, ...bots(1, phase.seats - 2)] } });
     }
     if (m.t === "mg_move" && opponent && m.from === opponent.id) inbox.current?.(m);
     if (m.t === "mg_quit" && opponent && m.from === opponent.id) setLeft(true);
@@ -550,15 +572,28 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
   }, [cid, ctx.me]);
 
   const vsBots = () => {
-    reward.reset();
     setLeft(false);
-    setPhase({ k: "play", seed: newSeed(), cid: null, seats: [{ kind: "me", name: me }, ...bots(1, count - 1)] });
+    setPhase({ k: "paying", then: { k: "play", seed: newSeed(), cid: null, seats: [{ kind: "me", name: me }, ...bots(1, count - 1)] } });
   };
   const passAndPlay = () => {
-    reward.reset();
     setLeft(false);
-    setPhase({ k: "play", seed: newSeed(), cid: null, seats: Array.from({ length: count }, (_, i): Seat => ({ kind: i === 0 ? "me" : "local", name: i === 0 ? me : `Player ${i + 1}` })) });
+    setPhase({ k: "paying", then: { k: "play", seed: newSeed(), cid: null, seats: Array.from({ length: count }, (_, i): Seat => ({ kind: i === 0 ? "me" : "local", name: i === 0 ? me : `Player ${i + 1}` })) } });
   };
+
+  if (phase.k === "paying") {
+    const { then, cid: payCid } = phase;
+    return (
+      <Paying
+        fee={fee.fee}
+        pay={fee.pay}
+        onPaid={() => setPhase(then)}
+        onFailed={() => {
+          if (payCid && ctx.me) room.send({ t: "mg_quit", cid: payCid, from: ctx.me.id });
+          setPhase({ k: "menu" });
+        }}
+      />
+    );
+  }
 
   if (phase.k === "play") {
     const online = phase.cid
@@ -582,8 +617,7 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
           seed={phase.seed}
           online={online}
           onEnd={(r) => {
-            const vsPeople = phase.seats.some((s) => s.kind === "remote");
-            if (phase.seats.some((s) => s.kind === "bot" || s.kind === "remote") && !phase.seats.some((s) => s.kind === "local")) void reward.claim(r.won ? 1 : 0, r.won ? (vsPeople ? 3 : 2) : 0, r.won);
+            questEvent({ type: "play", game: def.id, score: r.won ? 1 : 0, won: r.won });
             window.setTimeout(() => setPhase({ k: "over", ...r, again }), 900);
           }}
         />
@@ -595,7 +629,6 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
       <div className="relative space-y-3 text-center">
         <TurnResult won={phase.won} draw={phase.draw} winners={phase.winners} />
         {phase.won && <Confetti />}
-        <RewardLine note={reward.note} />
         <div className="flex gap-2">
           <button onClick={phase.again} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink py-3 font-semibold text-white">
             <RotateCcw className="size-4" /> Play again
@@ -668,9 +701,7 @@ function TurnPlay({ def, ctx, invite }: { def: MiniGameDef; ctx: PlayCtx; invite
         </button>
       </div>
       {count > 2 && <p className="text-xs text-muted">Challenging someone: you, them and {count - 2} bot{count > 3 ? "s" : ""}.</p>}
-      <p className="flex items-center gap-1.5 text-xs text-muted">
-        <Check className="size-3.5 text-me" /> Beat the computer for {cash(4)}, a person for {cash(6)}.
-      </p>
+      <FeeLine fee={fee.fee} error={fee.error} />
     </div>
   );
 }

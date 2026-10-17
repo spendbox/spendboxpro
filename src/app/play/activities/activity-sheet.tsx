@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { RoomMember } from "../rooms";
+import { FeeGate } from "../minigames/fee";
 import { Sheet } from "../sheet";
 import { Archery } from "./archery";
 import { Cards } from "./cards";
@@ -73,10 +74,19 @@ export function ActivitySheet({
           ))}
         </div>
       )}
-      <Game key={game} game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} ordering={ordering} />
+      {PAID.has(game) ? (
+        <FeeGate key={game} game={game} title={GAME_TITLE[game]} signedIn={!!me}>
+          <Game game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} ordering={ordering} />
+        </FeeGate>
+      ) : (
+        <Game key={game} game={game} props={props} item={item} seating={seating} onUseStairs={onUseStairs} ordering={ordering} />
+      )}
     </Sheet>
   );
 }
+
+/** The games here cost a small fee to play (../minigames/fee); seats, menus and the rest don't. */
+const PAID = new Set<GameId>(["darts", "archery", "reflex", "trivia", "pool", "cards", "rps", "dice", "karaoke"]);
 
 function Game({ game, props, item, seating, onUseStairs, ordering }: { game: GameId; props: GameProps; item: ActivityItem; seating?: Seating; onUseStairs?: () => void; ordering?: Ordering }) {
   switch (game) {

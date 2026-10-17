@@ -1924,7 +1924,8 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
   const green = smoothNoise(x / 6 + 31, z / 6 - 17, s + 11) - plan.style.green;
   if (green > 0.7 && density < 0.6) {
     if (green > 0.82 && r[0] < 0.3) return { i, x, z, kind: "pond", top: 0.5, r };
-    if (r[3] < 0.035) return { i, x, z, kind: "ferris", top: 2.85, r };
+    // A Ferris wheel in one green lot in 300 or so (they were ten times as common: too many).
+    if (r[3] < 0.0035) return { i, x, z, kind: "ferris", top: 2.85, r };
     return { i, x, z, kind: "park", top: 0.9, r };
   }
   const nextToRoad = isRoad(plan, x + 1, z) || isRoad(plan, x - 1, z) || isRoad(plan, x, z + 1) || isRoad(plan, x, z - 1);
@@ -1958,7 +1959,7 @@ function baseTile(plan: CityPlan, x: number, z: number): Tile {
     return { i, x, z, kind: feature, top: tops[feature] ?? 0.8, r, v: Math.floor(r[2] * 2) };
   }
   if (!plan.region && Math.hypot(x, z) > 13 && r[2] < 0.035) return { i, x, z, kind: "turbine", top: 3.2, r };
-  if (r[3] > 0.997) return { i, x, z, kind: "ferris", top: 2.85, r };
+  if (r[3] > 0.9997) return { i, x, z, kind: "ferris", top: 2.85, r };
   if (r[0] < 0.16) return { i, x, z, kind: "trees", top: 1, r };
   if (r[0] < 0.175) return { i, x, z, kind: "watertower", top: 2.2, r };
   if (r[0] < 0.182) return { i, x, z, kind: "mast", top: 4, r };

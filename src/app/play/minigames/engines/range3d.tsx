@@ -6,6 +6,7 @@ import { Crosshair, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { playSfx } from "../../sound";
 import { drum, tone } from "../sfx";
+import { FullScreen } from "../fullscreen";
 import { Pad, Pads, useFinish, useKeys } from "../stage";
 import type { EngineProps } from "../types";
 import { planRounds, RangeWorld, WEAPONS, type RoundPlan, type ShotResult } from "./range3d-scene";
@@ -437,12 +438,11 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
     );
 
   return (
-    <div className="w-full select-none">
+    <FullScreen onQuit={() => finish(g.current?.score ?? 0)} quitLabel="Leave the range" className="select-none bg-[#14171c]">
       <style>{CSS}</style>
       <div
         ref={wrap}
-        className="relative mx-auto w-full touch-none overflow-hidden rounded-3xl bg-[#14171c]"
-        style={{ aspectRatio: "3 / 4", maxHeight: "62dvh", maxWidth: "calc(62dvh * 0.75)" }}
+        className="relative w-full flex-1 touch-none overflow-hidden bg-[#14171c]"
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
@@ -478,7 +478,7 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
 
         {/* Top: round, score, time */}
         <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-3 pb-6 pt-2.5 text-white">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-2 pr-20">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[10px] font-black tracking-[0.18em] text-[#ffa94d]">
                 <Crosshair className="h-3 w-3" /> ROUND {hud.ri + 1}/{plans.length}
@@ -588,6 +588,7 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
         )}
       </div>
 
+      <div className="shrink-0 px-3 pb-3">
       <Pads>
         <Pad onDown={reload} className={cn("max-w-[30%] bg-[#343a40]", (hud.phase !== "play" || hud.mag === p.mag || !hud.reserve) && "opacity-40")}>
           <RotateCcw className="h-5 w-5" /> Reload
@@ -601,7 +602,8 @@ export default function Range3D({ seed, onEnd }: EngineProps) {
           <Crosshair className="h-6 w-6" /> FIRE
         </Pad>
       </Pads>
-    </div>
+      </div>
+    </FullScreen>
   );
 }
 
