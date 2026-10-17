@@ -10,11 +10,11 @@ something off every property you buy from the city:
 | Level | From | Off property |
 |---|---|---|
 | 🌱 New in town | 0 | |
-| 👋 Familiar face | 20 | 2% |
-| ⭐ Rising star | 50 | 4% |
-| 😎 Big deal | 100 | 7% |
-| 🏅 Local legend | 180 | 10% |
-| 👑 City icon | 300 | 15% |
+| 👋 Familiar face | 40 | 2% |
+| ⭐ Rising star | 100 | 4% |
+| 😎 Big deal | 200 | 7% |
+| 🏅 Local legend | 360 | 10% |
+| 👑 City icon | 600 | 15% |
 
 The server works out the price with your discount when you buy (`buyUnit`). The Reputation screen
 shows your level, how far to the next, and every level.
