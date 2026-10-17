@@ -426,7 +426,8 @@ export function levelsOf(t: Tile, plan: CityPlan): PlaceLevel[] {
       R("o", "School yard", "outdoor", "plaza", x + 0.3, 0.08, z + 0.3, 0.06, 0.06, { weight: 0.7 });
       break;
     case "worship":
-      R("g", t.v === 1 ? "Church hall" : "Prayer hall", "interior", "gallery", x, 0.08, z - 0.05, 0.25, 0.25);
+      // Inside as outside: a church (pews, the altar) or a mosque (the prayer carpet), as the cathedral's.
+      R("g", t.v === 1 ? "Church hall" : "Prayer hall", "interior", t.v === 1 ? "church" : "mosque", x, 0.08, z - 0.05, 0.25, 0.25);
       break;
     case "pitch":
       R("o", "On the pitch", "outdoor", "park", x, 0.08, z, 0.1, 0.1);
