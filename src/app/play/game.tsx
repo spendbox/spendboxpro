@@ -580,6 +580,8 @@ export function Game({
   const [homeFloors, setHomeFloors] = useState<{ now: number; count: number } | null>(null);
   const [homeFloorsOpen, setHomeFloorsOpen] = useState(false);
   const [homeFloorTo, setHomeFloorTo] = useState<{ to: number; at: number } | null>(null);
+  /** Food paid for at your table: the waiter brings it (src/app/play/city/serve.ts). */
+  const [serve, setServe] = useState<{ ids: string[]; at: number } | null>(null);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -2078,7 +2080,7 @@ export function Game({
       case "foodcourt":
       case "lounge":
       case "suite":
-        return { label: theme === "lounge" ? "Order a drink" : theme === "suite" ? "Room service" : "Order food", icon: UtensilsCrossed, run: act("menu", "Order") };
+        return { label: theme === "suite" ? "Room service" : "Order food & drinks", icon: UtensilsCrossed, run: act("menu", "Order") };
       case "club":
         return { label: "Dance", icon: Music, run: () => startDancing() };
       case "shop":
@@ -2372,6 +2374,7 @@ export function Game({
             onAtGate={setAtGate}
             onHomeFloors={setHomeFloors}
             homeFloorTo={homeFloorTo}
+            serve={serve}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
@@ -3305,6 +3308,15 @@ export function Game({
             roundId={round?.id ?? null}
             onClose={() => setActivity(null)}
             seating={rooms}
+            ordering={{
+              region: worldId && !guest ? worldId : null,
+              place: place?.building ?? null,
+              where: placeRoom?.type ?? null,
+              seated: !!rooms.mySeat,
+              perMint: worldRegion?.prices.perMint ?? 1_500,
+              onServed: (ids) => setServe((r) => ({ ids, at: (r?.at ?? 0) + 1 })),
+              onPaid: () => startTransition(() => router.refresh()),
+            }}
             onUseStairs={
               placeRoom && (placeRoom.levels?.length ?? 0) > 1
                 ? () => {

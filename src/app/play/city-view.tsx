@@ -66,6 +66,8 @@ import { createKites } from "./city/kites";
 import { buildingParts } from "./city/building-kit";
 import { marketParts } from "./city/market-kit";
 import { museumParts } from "./city/museum-kit";
+import { createService } from "./city/serve";
+import { MENU_BY_ID } from "@/lib/world/menu";
 import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
 import { setSceneSnapshot } from "./city/snapshot";
@@ -406,6 +408,8 @@ type Props = {
   onHomeFloors?: (floors: { now: number; count: number } | null) => void;
   /** Change it to go on inside from a landmark's entrance. */
   gateIn?: number;
+  /** Food you ordered at your table (menu ids): a waiter brings it; `at` makes each order new. */
+  serve?: { ids: string[]; at: number } | null;
   /** Go to this floor of the planned home you're in (its Floor button); `at` makes each ask new. */
   homeFloorTo?: { to: number; at: number } | null;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
@@ -1700,6 +1704,7 @@ export function CityView({
   onHomeFloors,
   gateIn = 0,
   homeFloorTo = null,
+  serve = null,
   onBubbleSignIn,
   onBroken,
 }: Props) {
@@ -1736,6 +1741,7 @@ export function CityView({
     /** From a landmark's entrance, on inside. */
     goInside: () => void;
     setHomeFloor: (to: number) => void;
+    serveFood: (ids: string[]) => boolean;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
@@ -5649,6 +5655,8 @@ export function CityView({
       poles?: { x: number; z: number }[];
       /** Money sprayed here, flying and lying on the floor (./city/money-spray). */
       money?: ReturnType<typeof createMoneySpray> | null;
+      /** Waiters bringing food, and what's on the tables (./city/serve). */
+      service?: ReturnType<typeof createService> | null;
       crowd: Figures | null;
       dancers: Figures | null;
       dancersKey: string;
@@ -5921,6 +5929,7 @@ export function CityView({
       st.dancers?.dispose();
       st.dancers3d?.dispose();
       st.money?.dispose();
+      st.service?.dispose();
       st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
@@ -6774,6 +6783,29 @@ export function CityView({
       homeFloorsKey = key;
       cb.current.onHomeFloors?.(f);
     }
+    /**
+     * Food you've ordered (menu ids): a waiter brings it from the way in to your seat and sets it
+     * down on the table in front of you. False when you're not sitting down inside.
+     */
+    function serveFood(ids: string[]) {
+      if (view?.kind !== "place" || !view.stage.interior) return false;
+      const st = view.stage;
+      const inside = st.interior;
+      if (!inside) return false;
+      const m = mySeatNow ? /:seat:(\d+)$/.exec(mySeatNow) : null;
+      const seat = m ? st.seats[Number(m[1])] : undefined;
+      if (!seat) return false;
+      const dishes = ids.flatMap((id) => {
+        const it = MENU_BY_ID.get(id);
+        return it ? [it.dish] : [];
+      });
+      if (!dishes.length) return false;
+      const from = st.views[0] ?? { lx: 0, lz: 0 };
+      st.service ??= createService(st.holder, inside.group, { x: from.lx, z: from.lz });
+      st.service.clear();
+      st.service.serve({ x: seat.x, z: seat.z, ry: seat.ry }, dishes);
+      return true;
+    }
     /** Inside a planned home: go to one of its floors (its Floor button). */
     function setHomeFloor(to: number) {
       if (view?.kind !== "place" || !view.stage.homeKey) return;
@@ -7212,6 +7244,7 @@ export function CityView({
         st.dancers3d?.update(dt3);
         st.crowd3d?.update(dt3);
         st.money?.update(dt3);
+        st.service?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -8166,7 +8199,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor, serveFood };
 
     return () => {
       alive = false;
@@ -8265,6 +8298,11 @@ export function CityView({
   useEffect(() => {
     api.current?.setAds(ads ?? []);
   }, [ads]);
+  // Your order arriving at your table.
+  const serveKey = serve ? `${serve.ids.join(",")}|${serve.at}` : "";
+  useEffect(() => {
+    if (serveKey) api.current?.serveFood(serveKey.split("|")[0].split(","));
+  }, [serveKey]);
   // A planned home's Floor button.
   const homeFloorKey = homeFloorTo ? `${homeFloorTo.to}|${homeFloorTo.at}` : "";
   useEffect(() => {

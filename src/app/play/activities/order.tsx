@@ -1,152 +1,136 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Beef,
-  CakeSlice,
-  ChefHat,
-  Cherry,
-  Citrus,
-  Cookie,
-  CupSoda,
-  Drumstick,
-  Egg,
-  Fish,
-  GlassWater,
-  Leaf,
-  Martini,
-  Milk,
-  Soup,
-  Star,
-  UtensilsCrossed,
-  Wheat,
-} from "lucide-react";
+import { Armchair, ChefHat, GlassWater, LoaderCircle, Minus, Plus, UtensilsCrossed } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { MENU, ORDER_MAX, priceLevel, type MenuItem } from "@/lib/world/menu";
+import { cash } from "@/lib/world/value";
 import { orderSomething } from "../activity-actions";
+import { orderMeal } from "../food-actions";
 import { playSfx } from "../sound";
 import { useActivityRoom } from "./hub";
 import { questEvent, refreshQuest } from "./quest-store";
-import { BigButton, GameHeader, type GameProps, nowMs, rand } from "./ui";
+import { BigButton, GameHeader, type GameProps } from "./ui";
 
-// The restaurant menu and the mocktail bar. Everything's on the house: order something and you
-// get a little card about it (and the room hears what you're having). Now and then the waiter
-// slips you a side quest.
+// Ordering at a table (docs/FOOD.md): food and drinks at real Lagos prices (dearer at a hotel or a
+// club than at a buka). Sit down first, pick up to six things, pay, and a waiter brings them to
+// your table and sets them down in front of you. The room hears what you're having, and now and
+// then the waiter slips you a side quest.
 
-type Item = { name: string; blurb: string; icon: React.ComponentType<{ className?: string }>; color: string };
+/** Where you're ordering: the map, the place, what stands there, whether you're sitting, and what happens once it's paid. */
+export type Ordering = {
+  region: string | null;
+  place: string | null;
+  /** What stands there (a hotel, a club, a restaurant...), for the price level. */
+  where: string | null;
+  seated: boolean;
+  perMint: number;
+  /** Paid: the waiter brings these (menu ids). */
+  onServed: (ids: string[]) => void;
+  onPaid?: () => void;
+};
 
-const MENU: Item[] = [
-  { name: "Party jollof rice", blurb: "Smoky, peppery, with fried plantain on the side.", icon: Soup, color: "#e5484d" },
-  { name: "Pounded yam & egusi", blurb: "Soft, stretchy yam and a rich melon-seed soup.", icon: Soup, color: "#f5a524" },
-  { name: "Suya platter", blurb: "Spicy grilled beef with onions and yaji pepper.", icon: Beef, color: "#a0522d" },
-  { name: "Pepper soup", blurb: "Hot, spicy and comforting. Mind your tongue!", icon: Soup, color: "#d9480f" },
-  { name: "Moi moi & pap", blurb: "Steamed bean pudding with smooth, warm pap.", icon: Egg, color: "#e8590c" },
-  { name: "Ofada rice & ayamase", blurb: "Local rice with a green pepper stew that bites back.", icon: Leaf, color: "#2b8a3e" },
-  { name: "Asun", blurb: "Peppered goat meat, smoky and sticky.", icon: Drumstick, color: "#c92a2a" },
-  { name: "Grilled fish & chips", blurb: "Whole croaker, grilled with pepper sauce.", icon: Fish, color: "#1971c2" },
-  { name: "Akara & bread", blurb: "Crispy bean fritters in a soft roll.", icon: Wheat, color: "#e67700" },
-  { name: "Efo riro & semo", blurb: "Leafy vegetable soup packed with goodies.", icon: Leaf, color: "#2f9e44" },
-  { name: "Puff-puff", blurb: "Warm, sugary dough balls. Nobody can eat just one.", icon: Cookie, color: "#f59f00" },
-  { name: "Chin chin & cake", blurb: "Crunchy chin chin and a slice of birthday cake.", icon: CakeSlice, color: "#e64980" },
-];
+const TAB_ICON = { food: UtensilsCrossed, drink: GlassWater } as const;
 
-const BAR: Item[] = [
-  { name: "Chapman", blurb: "The classic: fizzy, fruity, with cucumber and a cherry.", icon: Cherry, color: "#e03131" },
-  { name: "Zobo cooler", blurb: "Hibiscus, ginger and pineapple over ice.", icon: GlassWater, color: "#a61e4d" },
-  { name: "Kunun aya", blurb: "Creamy tiger-nut milk with a hint of dates.", icon: Milk, color: "#d9a441" },
-  { name: "Pineapple-ginger fizz", blurb: "Sweet, spicy and very cold.", icon: Citrus, color: "#f59f00" },
-  { name: "Virgin mojito", blurb: "Lime, mint and soda. Zero drama.", icon: Martini, color: "#2f9e44" },
-  { name: "Sunset mocktail", blurb: "Orange, grenadine and a little umbrella.", icon: Martini, color: "#f76707" },
-  { name: "Coconut breeze", blurb: "Coconut water, lime and crushed ice.", icon: CupSoda, color: "#0c8599" },
-  { name: "Fura smoothie", blurb: "Millet balls blended with cold fresh milk.", icon: Milk, color: "#868e96" },
-];
-
-const CHEF_LINES = [
-  "The chef says it's their grandmother's recipe.",
-  "Served piping hot. Blow before you bite!",
-  "The table next to you is staring. They want some.",
-  "The waiter winks. Extra portion, on the house.",
-  "Perfect fuel for a long night of hiding.",
-  "Hunters can't search on an empty stomach either.",
-];
-
-export function Order({ where, ...props }: GameProps & { where: "restaurant" | "bar" }) {
-  const items = where === "bar" ? BAR : MENU;
-  const [served, setServed] = useState<{ item: Item; stars: number; line: string } | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [busyUntil, setBusyUntil] = useState(0);
+export function Order({ where, ordering, ...props }: GameProps & { where: "restaurant" | "bar"; ordering?: Ordering }) {
+  const [tab, setTab] = useState<"food" | "drink">(where === "bar" ? "drink" : "food");
+  const [basket, setBasket] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; good: boolean } | null>(null);
   const room = useActivityRoom(props.roundId, props.roomId, props.me);
+  const level = priceLevel(ordering?.where);
+  const perMint = ordering?.perMint ?? 1_500;
+  const priceOf = (m: MenuItem) => (m.naira * level) / perMint;
+  const total = basket.reduce((t, id) => t + priceOf(MENU.find((m) => m.id === id)!), 0);
+  const seated = ordering?.seated ?? false;
+  const count = (id: string) => basket.filter((b) => b === id).length;
+  const add = (id: string) => setBasket((b) => (b.length >= ORDER_MAX ? b : [...b, id]));
+  const remove = (id: string) =>
+    setBasket((b) => {
+      const k = b.lastIndexOf(id);
+      return k < 0 ? b : [...b.slice(0, k), ...b.slice(k + 1)];
+    });
 
-  async function order(item: Item) {
-    if (nowMs() < busyUntil) return;
-    setBusyUntil(nowMs() + 8000);
+  async function order() {
+    if (!basket.length || busy) return;
+    if (!seated) return setNote({ text: "Sit down first: tap a glowing chair at a table, then order.", good: false });
+    setBusy(true);
     setNote(null);
-    setServed({ item, stars: 4 + Math.round(rand()), line: CHEF_LINES[Math.floor(rand() * CHEF_LINES.length)] });
+    // On the real map it's paid for; elsewhere (the old hourly game) it's on the house.
+    if (ordering?.region && ordering.place) {
+      const r = await orderMeal(ordering.region, ordering.place, basket).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
+      if (!r.ok) {
+        setBusy(false);
+        return setNote({ text: r.error, good: false });
+      }
+      ordering.onPaid?.();
+    }
     playSfx("pop");
     questEvent({ type: "order", where, room: props.roomId });
+    const names = basket.map((id) => MENU.find((m) => m.id === id)!.name);
     if (props.me) {
-      room.send({ t: "toast", icon: where === "bar" ? "drink" : "food", from: props.me.id, text: `${props.me.name} is having ${item.name}.` });
-      const res = await orderSomething();
-      if (res.ok && res.quest) {
-        setNote(`The waiter slipped you a note: a side quest! "${res.quest.title}"`);
+      room.send({ t: "toast", icon: tab === "drink" ? "drink" : "food", from: props.me.id, text: `${props.me.name} ordered ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}.` });
+      const res = await orderSomething().catch(() => null);
+      if (res?.ok && res.quest) {
         refreshQuest();
         playSfx("levelup");
       }
     }
+    setBusy(false);
+    // The waiter's on the way: close the menu so you can watch him come.
+    ordering?.onServed(basket);
+    props.onClose();
   }
 
   return (
     <div className="space-y-3">
-      <GameHeader
-        icon={where === "bar" ? Martini : UtensilsCrossed}
-        title={where === "bar" ? "Mocktail bar" : "Menu"}
-        sub={props.label}
-        onClose={props.onClose}
-        color={where === "bar" ? "#0c8599" : "#e8590c"}
-      />
-      {served ? (
-        <div className="act-pop space-y-3 rounded-3xl p-4 text-white shadow-md" style={{ background: `linear-gradient(135deg, ${served.item.color}, #18202b)` }}>
-          <div className="flex items-center gap-3">
-            <span className="grid size-14 place-items-center rounded-2xl bg-white/15">
-              <served.item.icon className="size-8" />
-            </span>
-            <div>
-              <p className="font-display text-xl font-bold">{served.item.name}</p>
-              <p className="flex gap-0.5 text-gold">
-                {Array.from({ length: 5 }, (_, i) => (
-                  <Star key={i} className="size-4" fill={i < served.stars ? "currentColor" : "none"} />
-                ))}
-              </p>
-            </div>
-          </div>
-          <p className="text-sm text-white/85">{served.item.blurb}</p>
-          <p className="flex items-center gap-2 text-sm italic text-white/75">
-            <ChefHat className="size-4 shrink-0" /> {served.line}
-          </p>
-          {note && <p className="act-pop rounded-xl bg-gold px-3 py-2 text-sm font-semibold text-ink">{note}</p>}
-          <BigButton tone="soft" onClick={() => setServed(null)}>
-            Order something else
-          </BigButton>
-        </div>
-      ) : (
-        <>
-          <p className="text-sm text-muted">Everything is on the house. Tap to order.</p>
-          <ul className="grid gap-2">
-            {items.map((it) => (
-              <li key={it.name}>
-                <button onClick={() => void order(it)} className="flex w-full items-center gap-3 rounded-2xl bg-panel-2 px-3 py-2.5 text-left hover:bg-gold/15">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl text-white" style={{ background: it.color }}>
-                    <it.icon className="size-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold">{it.name}</span>
-                    <span className={cn("block truncate text-xs text-muted")}>{it.blurb}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+      <GameHeader icon={UtensilsCrossed} title="Order food & drinks" sub={props.label} onClose={props.onClose} color="#e8590c" />
+      {!seated && (
+        <p className="flex items-center gap-2 rounded-2xl bg-gold/15 px-3 py-2 text-sm">
+          <Armchair className="size-4 shrink-0 text-gold-dark" /> Sit at a table first (tap a glowing chair), then order. The waiter brings it to you.
+        </p>
       )}
+      <div className="flex gap-1 rounded-full bg-ink/5 p-1">
+        {(["food", "drink"] as const).map((t) => {
+          const Icon = TAB_ICON[t];
+          return (
+            <button key={t} onClick={() => setTab(t)} className={cn("flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full text-sm font-semibold", tab === t ? "bg-panel shadow-sm" : "text-muted")}>
+              <Icon className="size-4" /> {t === "food" ? "Food" : "Drinks"}
+            </button>
+          );
+        })}
+      </div>
+      <ul className="grid max-h-[46vh] gap-2 overflow-y-auto">
+        {MENU.filter((m) => m.kind === tab).map((m) => {
+          const n = count(m.id);
+          return (
+            <li key={m.id} className={cn("flex items-center gap-3 rounded-2xl px-3 py-2.5", n ? "bg-gold/15" : "bg-panel-2")}>
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl text-white" style={{ background: `#${m.dish.color.toString(16).padStart(6, "0")}` }}>
+                {m.kind === "drink" ? <GlassWater className="size-5" /> : <ChefHat className="size-5" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">{m.name}</span>
+                <span className="block truncate text-xs text-muted">{m.blurb}</span>
+              </span>
+              <span className="shrink-0 text-xs font-bold tabular-nums">{cash(priceOf(m))}</span>
+              {n > 0 && (
+                <button onClick={() => remove(m.id)} className="grid size-8 shrink-0 place-items-center rounded-full bg-ink/10" aria-label={`One less ${m.name}`}>
+                  <Minus className="size-4" />
+                </button>
+              )}
+              {n > 0 && <span className="w-4 shrink-0 text-center text-sm font-bold">{n}</span>}
+              <button onClick={() => add(m.id)} disabled={basket.length >= ORDER_MAX} className="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-white disabled:opacity-30" aria-label={`Add ${m.name}`}>
+                <Plus className="size-4" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {note && <p className={cn("rounded-xl px-3 py-2 text-sm font-semibold", note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit")}>{note.text}</p>}
+      <BigButton onClick={() => void order()} disabled={!basket.length || busy || !seated}>
+        {busy ? <LoaderCircle className="size-5 animate-spin" /> : basket.length ? `Order ${basket.length} for ${cash(total)}` : "Pick something to order"}
+      </BigButton>
+      {level > 1 && <p className="text-center text-xs text-muted">Prices here are {level}× a buka&apos;s: it&apos;s that kind of place.</p>}
     </div>
   );
 }
