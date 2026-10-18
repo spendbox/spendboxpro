@@ -201,6 +201,7 @@ begin
   update activity_days set last_ping = now() - interval '2 minutes' where user_id = d;
   v := online_ping(d);
   perform pg_temp.check((v->>'paid')::numeric = 0.33, 'after a trip: paid again');
+  perform pg_temp.check((select count(*) from ledger where user_id = d and kind = 'online_pay') = 1 and (select amount from ledger where user_id = d and kind = 'online_pay') = 0.66, 'online pay: one ledger row a day, added to');
 end $$;
 
 \o
