@@ -9,6 +9,30 @@
 -- functions made from now on closed by default too.
 --
 -- Safe to run more than once, and again after any later part (run it last).
+--
+-- Also: the owner's dashboard locks after 10 wrong passwords in 15 minutes (for everyone, for 15
+-- minutes), so a password can't be guessed by trying many at once (src/lib/admin.ts).
+
+create table if not exists public.admin_failures (
+  id bigserial primary key,
+  at timestamptz not null default now()
+);
+alter table public.admin_failures enable row level security;
+revoke all on table public.admin_failures from public, anon, authenticated;
+grant all on table public.admin_failures to service_role;
+
+/** Is the dashboard's sign-in locked (10 wrong passwords in the last 15 minutes)? */
+create or replace function public.admin_locked() returns boolean
+language sql stable security definer set search_path = public as $$
+  select count(*) >= 10 from public.admin_failures where at > now() - interval '15 minutes'
+$$;
+
+/** A wrong password at the dashboard (old ones are cleared). */
+create or replace function public.admin_failed() returns void
+language sql security definer set search_path = public as $$
+  delete from public.admin_failures where at < now() - interval '1 day';
+  insert into public.admin_failures default values;
+$$;
 
 do $$
 declare
