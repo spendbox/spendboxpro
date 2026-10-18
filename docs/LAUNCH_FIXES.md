@@ -87,10 +87,24 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   bill after the first week; the game server above fixes this too.
 - [ ] Run game-db/123 (TODO.md).
 
+## Found in the last check (October 2026)
+- [x] **Anyone could open an event as any player, for any fee.** Part 97 left `event_open` open to
+  the app's public key. Part 128 closes every game function to everyone but the server.
+- [x] **A phone saying "home" got into any club free.** The server now decides what a place is.
+- [ ] **Live channels are open to anyone with the app's key**: a changed app could put fake lines
+  in a game table's chat, or show a fake bottle parade (nothing that moves money: that's all on
+  the server). The fix is Supabase Realtime's private channels; worth doing before big pools.
+- [ ] Optional, for speed (not cost): Supabase's newer **JWT signing keys** (Settings → JWT Keys).
+  With the older key, checking who's signed in asks Supabase's sign-in service over the network on
+  every page and server call (supabase-js getClaims falls back to getUser); with the newer keys it's
+  checked on the server at once. Supabase doesn't charge per check.
+
 ## Later
-- [ ] The `ledger` gets a row per player a minute: add it up by the hour.
-- [ ] TURN relay password in the app's code: use only the short-lived ones from /api/turn.
-- [ ] Admin sign-in: lock out after a few wrong tries.
+- [x] The `ledger` gets a row per player a minute: add it up by the hour. Done: one online-pay row
+  a player a day, added to (game-db/124).
+- [x] TURN relay password in the app's code: use only the short-lived ones from /api/turn. (Nothing
+  to do: the fixed NEXT_PUBLIC_TURN_* login is only used if it's set, and it isn't.)
+- [x] Admin sign-in: lock out after a few wrong tries. Done: 15 minutes after 10 wrong passwords (game-db/128).
 - [ ] Update docs/COSTS.md (about 10 calls a minute, and Realtime messages).
 
 Expected monthly cost at 1,000 players after these: about $70 to $130 (₦110k to ₦200k); as it

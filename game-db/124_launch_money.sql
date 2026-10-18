@@ -189,6 +189,8 @@ create trigger challenge_stake_cap before insert on public.challenge_players
 
 -- ============================================================ 5. seen doing something (for online pay)
 alter table public.lives add column if not exists acted_at timestamptz;
+-- Today's online pay row in the ledger (one a day, added to: online_ping).
+alter table public.activity_days add column if not exists pay_ledger bigint;
 
 /** The server saw this player do something just now (written at most every 30 seconds). */
 create or replace function public.life_acted(p_user uuid) returns void
@@ -252,6 +254,7 @@ declare
   v_cap int := coalesce(public.setting('online_pay_daily_minutes'), 0)::int;
   v_paid numeric := 0;
   v_acted boolean;
+  v_row bigint;
 begin
   v_after := public.active_ping(p_user);
   -- Paid only if this very call counted the minute (active_ping stamps last_ping with this
@@ -262,7 +265,16 @@ begin
   if v_counted and v_acted and v_after <= v_cap and v_rate > 0 then
     v_paid := v_rate;
     update public.profiles set coins = coins + v_paid where id = p_user;
-    perform public.log_coins(p_user, null, 'online_pay', v_paid, false, 'Paid for being online');
+    -- One row in the ledger a day, added to each minute (not a row a minute: 13m rows a month at
+    -- 10,000 daily players, docs/COSTS.md).
+    update public.ledger set amount = amount + v_paid
+      where id = (select pay_ledger from public.activity_days where user_id = p_user and day = public.lagos_day())
+        and user_id = p_user and kind = 'online_pay';
+    if not found then
+      insert into public.ledger (user_id, kind, amount, bonus, note) values (p_user, 'online_pay', v_paid, false, 'Paid for being online')
+        returning id into v_row;
+      update public.activity_days set pay_ledger = v_row where user_id = p_user and day = public.lagos_day();
+    end if;
   end if;
   return jsonb_build_object('minutes', v_after, 'paid', v_paid, 'rate', v_rate, 'left', greatest(0, v_cap - v_after), 'idle', not v_acted);
 end $$;

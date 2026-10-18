@@ -6,6 +6,7 @@ import { clubEntryMint, gameFeeMint, MONORAIL_FARE, RIDE_FARE_NAIRA, rideFare, T
 import { spiralXY } from "@/lib/city/layout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
+import { CLUB_PLACES, whatIsAt } from "@/lib/world/what-is";
 import { MINIGAME_BY_ID } from "./minigames/registry";
 
 // Paying to go places: the first visit to a place in each town, and train fares (every time).
@@ -83,7 +84,10 @@ export async function payClubEntry(place: string, type: string | undefined): Pro
   const region = String(life?.region ?? "");
   const map = REGIONS[region] ? regionMap(region) : null;
   const [x, z] = spiralXY(Number(place.slice(2)));
-  const fee = clubEntryMint(place, type, REGIONS[region]?.prices.perMint ?? 1_500, map?.spotAt(x, z)?.door);
+  // Whether it charges is the map's call, not the phone's (a phone saying "home" got in free).
+  const what = REGIONS[region] ? whatIsAt(region, place) : null;
+  void type;
+  const fee = what && CLUB_PLACES.has(what) ? clubEntryMint(place, what, REGIONS[region]?.prices.perMint ?? 1_500, map?.spotAt(x, z)?.door) : 0;
   const { data, error } = await db.rpc("life_club_entry", { p_user: userId, p_place: place, p_fee: fee });
   if (error) {
     // Never free at the door: before part 67 is run, entry is switched off; you need a life first.

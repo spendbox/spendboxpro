@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Bomb, Bot, Check, Clock, Copy, Crosshair, Crown, Download, Eye, HeartPulse, LoaderCircle, LogOut, Play, Shield, ShoppingCart, Siren, Swords, Trophy, Truck, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { COPS_ON } from "@/lib/features";
 import { GEAR, PRACTICE_LOADOUT, SIDES, copsMint, type GearId, type Loadout } from "@/lib/cops";
 import { countdown, sessionsNow, startLabel, timeOfDay } from "@/lib/scheduled";
 import { cash } from "@/lib/world/value";
@@ -46,7 +47,31 @@ function useNow() {
   return now;
 }
 
-export function CopsRobbers({ me, onClose, demo }: { me: Me | null; onClose: () => void; demo?: CopsStatus }) {
+/** Police & Thieves, or (until it's launched, src/lib/features.ts COPS_ON) a "coming soon" screen. */
+export function CopsRobbers(props: { me: Me | null; onClose: () => void; demo?: CopsStatus }) {
+  if (!COPS_ON && !props.demo) return <ComingSoon onClose={props.onClose} />;
+  return <CopsGame {...props} />;
+}
+
+function ComingSoon({ onClose }: { onClose: () => void }) {
+  return (
+    <FullScreen onQuit={onClose} quitLabel="Close Police & Thieves" className="bg-[#0b0e14]">
+      <div className="relative grid flex-1 place-items-center overflow-hidden px-6 text-center">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(28,79,214,.45),transparent_55%),radial-gradient(ellipse_at_85%_100%,rgba(240,140,0,.35),transparent_55%)]" />
+        <div className="relative max-w-sm">
+          <Siren className="mx-auto size-12 text-[#74c0fc]" />
+          <h1 className="mt-3 font-display text-[40px] font-black leading-none tracking-tight text-white">
+            <span className="text-[#5c8dff]">POLICE</span> <span className="text-white/60">&amp;</span> <span className="text-[#ffa94d]">THIEVES</span>
+          </h1>
+          <p className="mt-4 inline-block rounded-full bg-white/10 px-4 py-1.5 text-sm font-black tracking-[0.2em] text-[#ffd43b]">COMING SOON</p>
+          <p className="mt-4 text-sm text-white/70">Thieves rob the bank and run for the hideout. Police stop them. A whole city to fight in, every 8 hours, and the winners share the pool. Get ready.</p>
+        </div>
+      </div>
+    </FullScreen>
+  );
+}
+
+function CopsGame({ me, onClose, demo }: { me: Me | null; onClose: () => void; demo?: CopsStatus }) {
   const meAvatar = me?.avatar;
   const router = useRouter();
   const now = useNow();

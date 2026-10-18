@@ -1,4 +1,5 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
@@ -32,8 +33,12 @@ const sign = (body: string) => createHmac("sha256", `${password()}|${path()}`).u
 
 /** Checks the email and password; on a match, signs this browser in for 12 hours. */
 export async function adminSignIn(e: string, p: string): Promise<boolean> {
-  const ok = email().length > 0 && password().length >= 8 && same(e.trim().toLowerCase(), email()) && same(p, password());
+  // Locked after 10 wrong passwords in 15 minutes (game-db/128; before it's run, never locked).
+  const db = createAdminClient();
+  const locked = await db.rpc("admin_locked").then((r) => r.data === true, () => false);
+  const ok = !locked && email().length > 0 && password().length >= 8 && same(e.trim().toLowerCase(), email()) && same(p, password());
   if (!ok) {
+    if (!locked) await db.rpc("admin_failed").then(() => undefined, () => undefined);
     // Slow down guessing.
     await new Promise((r) => setTimeout(r, 1200));
     return false;
