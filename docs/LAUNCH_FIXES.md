@@ -94,15 +94,16 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
 - [ ] **Live channels are open to anyone with the app's key**: a changed app could put fake lines
   in a game table's chat, or show a fake bottle parade (nothing that moves money: that's all on
   the server). The fix is Supabase Realtime's private channels; worth doing before big pools.
-- [ ] Delete `NEXT_PUBLIC_TURN_USERNAME` and `NEXT_PUBLIC_TURN_CREDENTIAL` in Vercel (Cloudflare's
-  short-lived logins replace them), and change that password at the relay.
-- [ ] Supabase: switch the project to the newer **JWT signing keys** (Settings → JWT Keys), so
-  checking who's signed in costs nothing on every page and call (stage 4).
+- [ ] Optional, for speed (not cost): Supabase's newer **JWT signing keys** (Settings → JWT Keys).
+  With the older key, checking who's signed in asks Supabase's sign-in service over the network on
+  every page and server call (supabase-js getClaims falls back to getUser); with the newer keys it's
+  checked on the server at once. Supabase doesn't charge per check.
 
 ## Later
 - [x] The `ledger` gets a row per player a minute: add it up by the hour. Done: one online-pay row
   a player a day, added to (game-db/124).
-- [ ] TURN relay password in the app's code: use only the short-lived ones from /api/turn.
+- [x] TURN relay password in the app's code: use only the short-lived ones from /api/turn. (Nothing
+  to do: the fixed NEXT_PUBLIC_TURN_* login is only used if it's set, and it isn't.)
 - [x] Admin sign-in: lock out after a few wrong tries. Done: 15 minutes after 10 wrong passwords (game-db/128).
 - [ ] Update docs/COSTS.md (about 10 calls a minute, and Realtime messages).
 
