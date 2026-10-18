@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 // Who is inside which place, live, using ONE Supabase Realtime presence channel per round
-// ("rooms:<roundId>"), or on the real map one per area of the city ("rooms:0:<area>", areaKey:
-// a square AREA_TILES across, where you are), so someone walking into a building is only
-// heard about by the phones round there, not by the whole city (docs/COSTS.md). A place is one level of a building (ground "b:<tile>:g", floor n
+// ("rooms:<roundId>"), or on the real map one per building, only while you're in it
+// ("rooms:0:b:<tile>", or a ride's own id), so someone walking in is only heard about by the few
+// people already inside (docs/COSTS.md, "Live channels"). The numbers over the other buildings
+// on the map come from the server instead (game-db/127, /api/room-counts). A place is one level of a building (ground "b:<tile>:g", floor n
 // "b:<tile>:f<n>", rooftop "b:<tile>:r") or a hot-air balloon ("balloon:<k>"). Each player in a
 // place shares { room, name, avatar, at }; everyone adds the counts up in their own browser.
 // Watchers who aren't signed in still see the counts but can't go in.
@@ -14,11 +15,6 @@ import { createClient } from "@/lib/supabase/client";
 // Seats: inside a place, players can sit on seats ("<room>:seat:<n>"), shared the same way
 // ({ seat, sitSince }). One person per seat: whoever sat down first keeps it (same moment: the
 // lower id). Nobody keeps a seat for long: after 3 minutes you stand up again.
-
-/** The real map's live areas: squares this many tiles (a tenth of a km) across. */
-export const AREA_TILES = 40;
-/** The live area a spot on the real map is in ("3_-2"). */
-export const areaKey = (x: number, z: number) => `${Math.floor(x / AREA_TILES)}_${Math.floor(z / AREA_TILES)}`;
 
 /** A balloon ride lasts this long, then you're dropped back in the city. */
 export const RIDE_MS = 10 * 60 * 1000;
@@ -124,8 +120,8 @@ export function useRooms(
   me: { id: string; name: string; avatar: unknown } | null,
   opts?: {
     onRideEnd?: () => void;
-    /** The real map: the live area you're in (areaKey), and no channel at all for guests. */
-    area?: string | null;
+    /** The real map: a live channel only for the building you're in (and none for guests). */
+    perPlace?: boolean;
   },
 ) {
   const [people, setPeople] = useState<Person[]>([]);
@@ -168,17 +164,17 @@ export function useRooms(
     } else void ch.untrack();
   }, []);
 
-  // One channel per round (on the real map, per area). Guests get a random key and never share
-  // where they are; on the real map they don't open one.
+  // One channel per round (on the real map, per building, while you're in it). Guests get a
+  // random key and never share where they are; on the real map they don't open one.
   const meId = me?.id ?? null;
-  const area = opts?.area;
-  const areaMode = area !== undefined;
+  const perPlace = !!opts?.perPlace;
+  const here = perPlace && current && current.round === roundId ? buildingOf(current.room.id) : null;
   useEffect(() => {
     if (roundId == null) return;
-    if (areaMode && (!meId || !area)) return;
+    if (perPlace && (!meId || !here)) return;
     const supabase = createClient();
     const key = meId ?? `guest-${Math.random().toString(36).slice(2)}`;
-    const channel = supabase.channel(areaMode ? `rooms:${roundId}:${area}` : `rooms:${roundId}`, { config: { presence: { key } } });
+    const channel = supabase.channel(perPlace ? `rooms:${roundId}:${here}` : `rooms:${roundId}`, { config: { presence: { key } } });
     channelRef.current = channel;
     channel
       .on("presence", { event: "sync" }, () => setPeople(peopleFrom(channel.presenceState<Meta>() as unknown as Record<string, Meta[]>)))
@@ -194,7 +190,7 @@ export function useRooms(
       setPeople([]);
       supabase.removeChannel(channel);
     };
-  }, [roundId, meId, publish, areaMode, area]);
+  }, [roundId, meId, publish, perPlace, here]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
