@@ -7,29 +7,15 @@
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { regionMap } from "@/lib/world";
-import { makePlan, spiralIndex, spiralXY, tileAt, type CityPlan } from "@/lib/city/layout";
+import { spiralXY } from "@/lib/city/layout";
+import { CLUB_PLACES, whatIsAt } from "@/lib/world/what-is";
 import { billNaira, MENU_BY_ID } from "@/lib/world/menu";
 import { BOTTLE_BY_ID, BOTTLES_MAX, bottlesNaira } from "@/lib/world/bottles";
 import { clubEntryNaira } from "@/lib/fees";
 
 type Fail = { ok: false; error: string };
 
-const plans = new Map<string, CityPlan>();
-/** What stands at a place ("b:<tile>"): a big building's type, or the tile's kind. */
-function whatIs(region: string, place: string): string | null {
-  const map = regionMap(region);
-  const m = /^b:(\d{1,7})$/.exec(place);
-  if (!map || !m) return null;
-  let plan = plans.get(region);
-  if (!plan) {
-    plan = makePlan(map.region.seed, map);
-    plans.set(region, plan);
-  }
-  const [x, z] = spiralXY(Number(m[1]));
-  if (!map.inside(x, z)) return null;
-  const t = tileAt(plan, spiralIndex(x, z));
-  return t.kind === "structure" && t.structure ? t.structure.type : t.kind;
-}
+const whatIs = whatIsAt;
 
 const n = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0)) || 0;
 
@@ -65,7 +51,8 @@ export async function orderBottles(region: string, place: string, ids: string[])
   const map = regionMap(region);
   if (!map) return { ok: false, error: "Unknown place." };
   const p = String(place ?? "");
-  if (whatIs(region, p) !== "club") return { ok: false, error: "Bottle service is only in clubs." };
+  const what = whatIs(region, p);
+  if (!what || !CLUB_PLACES.has(what)) return { ok: false, error: "Bottle service is only in clubs." };
   const [x, z] = spiralXY(Number(p.slice(2)));
   const door = clubEntryNaira(p, "club", map.spotAt(x, z)?.door);
   const list = Array.isArray(ids) ? ids.map(String).filter((id) => BOTTLE_BY_ID.has(id)) : [];
