@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] **Urgent, security: run `game-db/128_lock_down.sql` now** (on the live database, and the test one). Anyone with the app's public key can currently make any player host an event and charge them any fee (part 97 left that function open). This closes it and every other game function to everyone but the game's server. Safe to run any time; run it again after any later part.
 - [ ] **Launch Ready: 1,000 Players**: the fixes before opening to 1,000 players (money cheats, stuck games, cost, phone speed), in docs/LAUNCH_FIXES.md.
 - [ ] Then run `game-db/121_games_cost.sql` (games cost money to play: ₦1,000 a go, the shooting range and paintball ₦5,000, chess and draughts ₦2,000; the older room games stop paying out). Run it after 120. Until then games are free to play (and pay nothing).
 - [ ] Then run `game-db/122_host_games.sql` (Play: hosting a game costs ₦20,000 for two-player games and ₦100,000 for the rest, 3 minutes to join, and "I'm next" lines). Run it after 121. Until then Play still works, with the old challenge fee rules.
