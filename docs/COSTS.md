@@ -82,7 +82,7 @@ paintball $80); from 10,000 the owned-buildings list (84 TB a month) is most of 
    about 6. Saves about $10 at 1,000 daily players, $200 at 10,000 (Large instead of XL),
    $1,500 at 100,000.
 4. **Done.** **Paintball 4 updates a second, not 8** (launch fix 14): $45 at 1,000, $450 at 10,000.
-5. **Counts over buildings from the server** (with the 90 s people look) instead of the area
+5. **Done** (game-db/127, /api/room-counts; a live channel only for the building you're in). **Counts over buildings from the server** (with the 90 s people look) instead of the area
    channels, keeping a live channel only for the place you're in: $11 at 1,000, $1,100 at
    10,000, $110,000 at 100,000.
 

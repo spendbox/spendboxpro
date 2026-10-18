@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { currentUserId } from "@/lib/game";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS } from "@/lib/world";
+import { spiralXY } from "@/lib/city/layout";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -23,6 +24,17 @@ async function cityLatest(db: Db, region: string) {
   return out;
 }
 
+/** Which room you're in ("b:<tile>:<level>", a ride, or "" for none); nothing before part 127 is run. */
+async function inRoom(db: Db, userId: string, room: string) {
+  const r = /^[a-z]:?[a-z0-9:_-]{0,58}$/i.test(room) ? room : "";
+  const m = /^b:(\d{1,7})(:|$)/.exec(r);
+  const [x, z] = m ? spiralXY(Number(m[1])) : [null, null];
+  await db.rpc("life_in_room", { p_user: userId, p_room: r, p_x: x, p_z: z }).then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
 /** What's new for you (src/app/play/pulse.ts): your newest notice, and your city's. */
 async function latestFor(db: Db, userId: string, region: string | null) {
   const [notice, city] = await Promise.all([
@@ -40,7 +52,8 @@ async function latestFor(db: Db, userId: string, region: string | null) {
  * game...). Answers { ok, minutes, paid, rate, left, idle } (paid and rate in mint; idle: not paid
  * for that reason), and latest: what's new (with
  * ?region=, your city's too), so the game only fetches notices, events and the Town Hall when
- * something changed.
+ * something changed. ?room= says which room you're in ("" for none), for the counts over the
+ * buildings on everyone's map (game-db/127, /api/room-counts).
  */
 export async function POST(request: NextRequest) {
   const userId = await currentUserId().catch(() => null);
@@ -48,7 +61,12 @@ export async function POST(request: NextRequest) {
   const db = createAdminClient();
   const asked = request.nextUrl.searchParams.get("region");
   const region = asked && REGIONS[asked] ? asked : null;
-  const [{ data, error }, latest] = await Promise.all([db.rpc("online_ping", { p_user: userId }), latestFor(db, userId, region).catch(() => null)]);
+  const room = request.nextUrl.searchParams.get("room");
+  const [{ data, error }, latest] = await Promise.all([
+    db.rpc("online_ping", { p_user: userId }),
+    latestFor(db, userId, region).catch(() => null),
+    room === null ? null : inRoom(db, userId, room),
+  ]);
   if (!error && data) {
     const d = data as { minutes?: number; paid?: number; rate?: number; left?: number; idle?: boolean };
     return NextResponse.json({ ok: true, minutes: Number(d.minutes ?? 0), paid: Number(d.paid ?? 0), rate: Number(d.rate ?? 0), left: Number(d.left ?? 0), idle: !!d.idle, latest });

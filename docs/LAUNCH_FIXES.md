@@ -54,7 +54,8 @@ Ticked off here as they're done (most urgent first). Prices and limits: docs/COS
   everyone, guests included. Count online from the minute's ping, room counts per area, no live
   channel for guests. (The main cost risk, and the 500-connection limit.)
   Done: on the real map no `city-online` (the count is the server's, kept 30 s per server);
-  who's in which place shared per 4 km area (`rooms:0:<area>`, src/app/play/rooms.ts); guests
+  who's in which place shared per 4 km area (`rooms:0:<area>`, src/app/play/rooms.ts; since then
+  only within the building you're in, `rooms:0:b:<tile>`, the map's numbers from game-db/127); guests
   open no live channel. About 141M Realtime messages a month at 1,000 daily players down to about
   4.5M ($340 a month down to nothing over the 5M included). The numbers: docs/COSTS.md, "Live
   channels".

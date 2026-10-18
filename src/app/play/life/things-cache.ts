@@ -52,6 +52,14 @@ export async function peopleAround<T>(region: string, x: number, z: number): Pro
   return { people: body.people ?? [], online: Number(body.online) || 0 };
 }
 
+/** How many are in each room round a spot (the server's, game-db/127): the spot rounded like the server, so phones share the CDN's answers. */
+export async function roomCountsAround(region: string, x: number, z: number): Promise<Record<string, number> | null> {
+  const g = 20;
+  const r = await fetch(`/api/room-counts?region=${encodeURIComponent(region)}&x=${Math.round(x / g) * g}&z=${Math.round(z / g) * g}`).catch(() => null);
+  if (!r?.ok) return null;
+  return ((await r.json()) as { counts?: Record<string, number> }).counts ?? {};
+}
+
 /** Players in the news (the same for everyone: cached for a minute, /api/player-news). */
 export async function sharedPlayerNews(region: string): Promise<PlayerEvent[]> {
   const r = await fetch(`/api/player-news?region=${encodeURIComponent(region)}`);

@@ -82,7 +82,7 @@ import { rodeSomething } from "./streak-actions";
 import { GreetButtons } from "./greet-buttons";
 import { useNoPageZoom } from "./no-page-zoom";
 import type { PersonOnMap } from "./people-actions";
-import { peopleAround } from "./life/things-cache";
+import { peopleAround, roomCountsAround } from "./life/things-cache";
 
 import { prefetchCard, rememberPreview, rememberPreviews } from "./people/card-cache";
 import { notificationsOn, turnOffNotifications, turnOnNotifications, useAwayDigest } from "./people/doorstep";
@@ -112,7 +112,7 @@ import { myVisits, payClubEntry, payFare, payRide, payVisit } from "./fee-action
 import { CLUB_ENTRY_MS, clubEntryMint, clubEntryNaira, clubTier, gameFeeMint, rideFare, TRAIN_FARE, visitFee } from "@/lib/fees";
 import { jobAt } from "@/lib/jobs";
 import type { Invite, PlayCtx } from "./minigames/shell";
-import { areaKey, rideRoom, useRooms, type RoomInfo } from "./rooms";
+import { buildingOf, rideRoom, useRooms, type RoomInfo } from "./rooms";
 import { RIDE_ICONS, RIDE_INFO, RideIcon, type RideKindName } from "./ride-icon";
 import { Safe } from "./safe";
 import { Sheet } from "./sheet";
@@ -782,14 +782,18 @@ export function Game({
   const [adExplainer, setAdExplainer] = useState(false);
   const [startCard, setStartCard] = useState<{ title: string; line: string } | null>(null);
   const online = useOnline(state.me.id, state.me.guest, !worldId);
-  // On the real map, who's in which place is shared round where you are (rooms.ts areaKey).
-  const spot = worldLife.mySpot;
-  const liveArea = worldId ? (spot ? areaKey(spot.x, spot.z) : null) : undefined;
+  // On the real map, who's in your place is shared live only with the people in it (rooms.ts);
+  // the numbers over the other buildings come from the server (roomCountsAround, below).
   const rooms = useRooms(worldId ? 0 : (state.round?.id ?? null), state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar }, {
     onRideEnd: () => {
       setRide(null);
     },
-    area: liveArea,
+    perPlace: !!worldId,
+  });
+  /** The room you're in, for the minute's ping (it tells the server, for everyone's counts). */
+  const myRoomRef = useRef<string | null>(null);
+  useEffect(() => {
+    myRoomRef.current = rooms.myRoom;
   });
   const meP = useMemo(() => (state.me.guest ? null : { id: state.me.id, name: state.me.name ?? "Player", avatar: state.me.avatar as unknown }), [state.me.guest, state.me.id, state.me.name, state.me.avatar]);
 
@@ -926,6 +930,37 @@ export function Game({
     };
     // A new area: look again (the people round here show under the menu).
   }, [worldId, me.guest, worldLife.centerRef, worldArea]);
+  // How many are in each place round where you're looking (the server's, game-db/127): every 90 s,
+  // and when you look somewhere new. Your own place's number is the live one (rooms.ts).
+  const [serverCounts, setServerCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!worldId) return;
+    let alive = true;
+    const look = () => {
+      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      void roomCountsAround(worldId, c.x, c.z).then((counts) => alive && counts && setServerCounts(counts));
+    };
+    const first = setTimeout(look, 1200);
+    const stop = whileHere(look, 90_000);
+    return () => {
+      alive = false;
+      clearTimeout(first);
+      stop();
+    };
+  }, [worldId, worldLife.centerRef, worldArea]);
+  const placeCounts = useMemo(() => {
+    if (!worldId) return rooms.buildingCounts;
+    const out: Record<string, number> = {};
+    for (const [room, k] of Object.entries(serverCounts)) {
+      const b = buildingOf(room);
+      out[b] = (out[b] ?? 0) + k;
+    }
+    // Where you are: the live number (the server's is up to a minute behind).
+    const mine = rooms.myRoom ? buildingOf(rooms.myRoom) : null;
+    if (mine) out[mine] = rooms.buildingCounts[mine] ?? out[mine] ?? 1;
+    return out;
+  }, [worldId, serverCounts, rooms.buildingCounts, rooms.myRoom]);
+  const levelCounts = useMemo(() => (worldId ? { ...serverCounts, ...rooms.counts } : rooms.counts), [worldId, serverCounts, rooms.counts]);
   // You, on the map where you are (your home, or the place you're at), as everyone else sees you.
   const mySpotX = worldLife.mySpot?.x ?? null;
   const mySpotZ = worldLife.mySpot?.z ?? null;
@@ -1002,7 +1037,7 @@ export function Game({
     // It also says what's new (./pulse): notices, the Town Hall and events are fetched on a change.
     const ping = () => {
       if (!isHere()) return onlineIdle();
-      void fetch(`/api/active?region=${encodeURIComponent(worldId)}`, { method: "POST", cache: "no-store" })
+      void fetch(`/api/active?region=${encodeURIComponent(worldId)}&room=${encodeURIComponent(myRoomRef.current ?? "")}`, { method: "POST", cache: "no-store" })
         .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; paid?: number; rate?: number; left?: number; idle?: boolean; latest?: Latest | null }>) : null))
         .then((d) => {
           if (!d?.ok) return;
@@ -2450,7 +2485,7 @@ export function Game({
             onGhost={openGhost}
             flyTo={worldId ? (worldLife.flyTo ?? flyTo) : flyTo}
             homePlans={worldId ? homePlans : undefined}
-            roomCounts={rooms.buildingCounts}
+            roomCounts={placeCounts}
             onRoom={onRoom}
             ride={ride}
             onRides={setRides}
@@ -3304,7 +3339,7 @@ export function Game({
               // The real map charges the fare there (on the place's card), not a first-visit fee.
               const cost = pickPlace.kind === "building" && !worldId ? visitCost(pickPlace) : 0;
               const id = `${pickPlace.id}:${lvl.id}`;
-              const here = rooms.counts[id] ?? 0;
+              const here = levelCounts[id] ?? 0;
               const Icon = lvl.id === "r" ? Sun : lvl.id === "g" ? DoorOpen : Layers;
               const hereNow = place?.building === pickPlace.id && place.level === lvl.id;
               return (
@@ -3348,7 +3383,7 @@ export function Game({
             worldLife.openExplorePlace(p);
           }}
           rides={rideList}
-          counts={rooms.counts}
+          counts={levelCounts}
           liveVenues={liveVenues}
           onRide={boardRide}
           onSport={(sp) => {
