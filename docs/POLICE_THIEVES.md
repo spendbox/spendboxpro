@@ -1,5 +1,9 @@
 # Police & Thieves
 
+
+**Not launched yet:** `COPS_ON` in `src/lib/features.ts` is off, so the game shows "Coming soon"
+(no countdown ring; the server takes no sign-ups, gear or results). Set it to true to launch.
+
 The first **scheduled game**: a big match every 8 hours, at **2am, 10am and 6pm Lagos time**
 (01:00, 09:00 and 17:00 UTC). More scheduled games can be added the same way (`src/lib/scheduled.ts`
 and the `sched_games` table).

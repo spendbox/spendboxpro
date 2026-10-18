@@ -5,6 +5,7 @@ import { COPS_TICKET_NAIRA, copsMint, GEAR_BY_ID, type GearId, type Loadout } fr
 import { currentUserId } from "@/lib/game";
 import { sessionAt, sessionsNow } from "@/lib/scheduled";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { COPS_ON } from "@/lib/features";
 
 // Police & Thieves on the server (game-db/123_scheduled_games.sql): the lobby's numbers, signing
 // up on a side, the shop (prices from src/lib/cops.ts, never the phone's), pulling out, your
@@ -15,6 +16,9 @@ const GAME = "cops-robbers";
 const n = (v: unknown) => Number(v ?? 0) || 0;
 
 type Fail = { ok: false; error: string; off?: boolean };
+
+/** Until it's launched (src/lib/features.ts COPS_ON): nothing here does anything. */
+const SOON: Fail = { ok: false, error: "Police & Thieves is coming soon.", off: true };
 
 function say(message: string | undefined): Fail {
   const [code, arg] = (message ?? "").split(":");
@@ -55,6 +59,7 @@ function mine(v: unknown): Mine {
 
 /** The lobby: now and next, the jackpot, the last game's leaderboard. */
 export async function copsStatus(): Promise<CopsStatus | Fail> {
+  if (!COPS_ON) return SOON;
   const userId = await currentUserId();
   const db = createAdminClient();
   const { live, next } = sessionsNow(GAME);
@@ -82,6 +87,7 @@ function nextKey(key: string) {
 
 /** Sign up (or change side) for the next game: 0 police, 1 thieves. The ticket is paid once. */
 export async function copsJoin(key: string, side: number): Promise<{ ok: true; me: Mine } | Fail> {
+  if (!COPS_ON) return SOON;
   const k = nextKey(key);
   if (!k || (side !== 0 && side !== 1)) return { ok: false, error: "That game isn't open for sign-ups." };
   const userId = await currentUserId();
@@ -93,6 +99,7 @@ export async function copsJoin(key: string, side: number): Promise<{ ok: true; m
 
 /** Buy gear for the next game (the price is the game's own). */
 export async function copsBuy(key: string, item: GearId, qty = 1): Promise<{ ok: true; me: Mine } | Fail> {
+  if (!COPS_ON) return SOON;
   const k = nextKey(key);
   const g = GEAR_BY_ID.get(item);
   if (!k || !g || !Number.isInteger(qty) || qty < 1 || qty > g.max) return { ok: false, error: "You can't buy that now." };
@@ -105,6 +112,7 @@ export async function copsBuy(key: string, item: GearId, qty = 1): Promise<{ ok:
 
 /** Pull out of the next game before it starts: everything you spent comes back. */
 export async function copsLeave(key: string): Promise<{ ok: true } | Fail> {
+  if (!COPS_ON) return SOON;
   const k = nextKey(key);
   if (!k) return { ok: false, error: "Too late to pull out." };
   const userId = await currentUserId();
@@ -134,6 +142,7 @@ export type CopsRoom = {
 
 /** A match of the game being played: yours (room null), or another one to watch. */
 export async function copsRoom(key: string, room: number | null = null): Promise<CopsRoom | { ok: true; status: string; rooms?: number } | Fail> {
+  if (!COPS_ON) return SOON;
   const s = sessionAt(GAME, key);
   if (!s) return { ok: false, error: "Unknown game." };
   if (room !== null && (!Number.isInteger(room) || room < 1 || room > 500)) return { ok: false, error: "Unknown match." };
@@ -160,6 +169,7 @@ export async function copsRoom(key: string, room: number | null = null): Promise
 
 /** What your phone saw at the end: the winning side (-1 a draw) and everyone's numbers. */
 export async function copsReport(key: string, winner: number, scores: Record<string, [number, number, number, number]>): Promise<{ ok: true; result: CopsResult | null } | Fail> {
+  if (!COPS_ON) return SOON;
   const s = sessionAt(GAME, key);
   if (!s || ![-1, 0, 1].includes(winner)) return { ok: false, error: "Unknown game." };
   const userId = await currentUserId();

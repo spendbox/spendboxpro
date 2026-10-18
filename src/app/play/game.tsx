@@ -1,7 +1,7 @@
 "use client";
 
 import { OnTop } from "./on-top";
-import { PASSPORT_ON } from "@/lib/features";
+import { COPS_ON, PASSPORT_ON } from "@/lib/features";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
@@ -4089,7 +4089,7 @@ export function Game({
       )}
       {/* Police & Thieves: beside Play, the countdown to the next game (2am, 10am, 6pm Lagos time),
           a ring that fills as it comes closer; LIVE while one is on. Opens its lobby. */}
-      {worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
+      {COPS_ON && worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
         <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[8.25rem] top-14 z-20 sm:right-[9.25rem] sm:top-16" />
       )}
       {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} onClose={() => setCopsOpen(false)} />}
