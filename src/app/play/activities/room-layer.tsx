@@ -1,5 +1,6 @@
 "use client";
 
+import { BOTTLE_BY_ID, BOTTLES_MAX, bottleWords } from "@/lib/world/bottles";
 import { cash } from "@/lib/world/value";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Coins, Dices, Martini, Mic, Music, PartyPopper, Square, Star, Target, Trophy, UtensilsCrossed, Volume2 } from "lucide-react";
@@ -39,10 +40,13 @@ export function RoomActivityLayer({
   roomId,
   me,
   className,
+  onBottles,
 }: {
   roundId: number | null;
   roomId: string | null;
   me: ActivityPlayer | null;
+  /** Someone else here bought bottles: the hostesses bring them to their seat. */
+  onBottles?: (m: { seat: string; ids: string[]; name: string }) => void;
   /** Where the notices sit (default: top centre, under the game's top bar). */
   className?: string;
 }) {
@@ -112,6 +116,16 @@ export function RoomActivityLayer({
         }
         setInvites((list) => [...list.filter((i) => i.from.id !== m.from.id), { cid: m.cid, game: m.game, from: m.from, until: nowMs() + 30_000 }]);
         playSfx("start");
+        break;
+      }
+      case "bottles": {
+        if (!m.from?.id || m.from.id === me?.id || !Array.isArray(m.ids) || typeof m.seat !== "string") return;
+        const ids = m.ids.map(String).filter((id) => BOTTLE_BY_ID.has(id)).slice(0, BOTTLES_MAX);
+        if (!ids.length) return;
+        const what = bottleWords(ids);
+        toast(`🍾 ${m.from.name} just ordered ${what}! Here come the bottles.`, "drink", m.from);
+        playSfx("levelup");
+        onBottles?.({ seat: m.seat, ids, name: String(m.from.name ?? "").slice(0, 20) });
         break;
       }
       case "toast":

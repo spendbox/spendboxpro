@@ -70,6 +70,8 @@ import { museumParts } from "./city/museum-kit";
 import { plazaDesign, plazaParts } from "./city/plaza-kit";
 import { FERRIS, ferrisWheel } from "./city/ferris";
 import { createService } from "./city/serve";
+import { createParades } from "./city/parade";
+import { BOTTLE_BY_ID } from "@/lib/world/bottles";
 import { MENU_BY_ID } from "@/lib/world/menu";
 import { plotLayout } from "@/lib/city/plots";
 import { CLEAR_GROUND, crossingParts, pieceParts, stationParts } from "./city/spans-kit";
@@ -413,6 +415,8 @@ type Props = {
   gateIn?: number;
   /** Food you ordered at your table (menu ids): a waiter brings it; `at` makes each order new. */
   serve?: { ids: string[]; at: number } | null;
+  /** Bottles someone in this club ordered (yours or another's): hostesses parade them to that seat; `at` makes each new. */
+  bottles?: { seat: string; ids: string[]; name: string; at: number } | null;
   /** Go to this floor of the planned home you're in (its Floor button); `at` makes each ask new. */
   homeFloorTo?: { to: number; at: number } | null;
   /** Signed out: a tap on a place's bubble (or its fun-place icon) asks you to sign in instead. */
@@ -1689,6 +1693,7 @@ export function CityView({
   gateIn = 0,
   homeFloorTo = null,
   serve = null,
+  bottles = null,
   onBubbleSignIn,
   onBroken,
 }: Props) {
@@ -1726,6 +1731,7 @@ export function CityView({
     goInside: () => void;
     setHomeFloor: (to: number) => void;
     serveFood: (ids: string[]) => boolean;
+    bottleParade: (seat: string, ids: string[], name: string) => boolean;
     setHomePlans: (plans: Record<number, HomePlan> | undefined) => void;
     /** Zoom in (dir 1) or out (dir -1) a step: the + and − buttons on a computer. */
     zoom: (dir: number) => void;
@@ -5624,6 +5630,8 @@ export function CityView({
       money?: ReturnType<typeof createMoneySpray> | null;
       /** Waiters bringing food, and what's on the tables (./city/serve). */
       service?: ReturnType<typeof createService> | null;
+      /** Bottle service: hostesses with sparklers, and the buckets left on tables (./city/parade). */
+      parades?: ReturnType<typeof createParades> | null;
       crowd: Figures | null;
       dancers: Figures | null;
       dancersKey: string;
@@ -5929,6 +5937,7 @@ export function CityView({
       st.dancers3d?.dispose();
       st.money?.dispose();
       st.service?.dispose();
+      st.parades?.dispose();
       st.me3d?.dispose();
       if (st.meRing) {
         st.meRing.geometry.dispose();
@@ -6805,6 +6814,28 @@ export function CityView({
       st.service.serve({ x: seat.x, z: seat.z, ry: seat.ry }, dishes);
       return true;
     }
+    /**
+     * Bottles ordered at a seat in this room ("<room>:seat:<n>", anyone's): hostesses bring them in
+     * a line from the way in, sparklers lit, the buyer's name on a sign. False when not inside.
+     */
+    function bottleParade(seatId: string, ids: string[], name: string) {
+      if (view?.kind !== "place" || !view.stage.interior) return false;
+      const st = view.stage;
+      const inside = st.interior;
+      if (!inside) return false;
+      const m = /:seat:(\d+)$/.exec(seatId);
+      const seat = m ? st.seats[Number(m[1])] : undefined;
+      if (!seat) return false;
+      const looks = ids.flatMap((id) => {
+        const b = BOTTLE_BY_ID.get(id);
+        return b ? [b.look] : [];
+      });
+      if (!looks.length) return false;
+      const from = st.views[0] ?? { lx: 0, lz: 0 };
+      st.parades ??= createParades(st.holder, inside.group, { x: from.lx, z: from.lz });
+      st.parades.parade({ x: seat.x, z: seat.z, ry: seat.ry }, looks.slice(0, 6), name);
+      return true;
+    }
     /** Inside a planned home: go to one of its floors (its Floor button). */
     function setHomeFloor(to: number) {
       if (view?.kind !== "place" || !view.stage.homeKey) return;
@@ -7244,6 +7275,7 @@ export function CityView({
         st.crowd3d?.update(dt3);
         st.money?.update(dt3);
         st.service?.update(dt3);
+        st.parades?.update(dt3);
         st.npcT = time;
         st.players?.update(time, camLocal);
         st.crowd?.update(time);
@@ -8198,7 +8230,7 @@ export function CityView({
       if (regionNow && currentSeed >= 0 && builtCount > 0) build(currentSeed, builtCount);
     }
     const center = () => ({ x: Math.round(controls.target.x), z: Math.round(controls.target.z) });
-    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor, serveFood };
+    api.current = { setMarkTags, center, build: buildFor, setOwned, setBusinesses, setMarkers, playEvents, setBalloon, setAds, setRevealed, setRoomCounts, setRide, setSteer, setSeats, setPlace, setSpot, setCaughtFaces, setWorldEvents, setHouses, setDance, setFriendPins, setChallengeLights, setPartyZones: partyLights.set, setRoomPeople, openRoom: openRoomById, focusEvent: focusEventAt, setGhosts, flyToTile, setHomePlans, zoom, goInside, setHomeFloor, serveFood, bottleParade };
 
     return () => {
       alive = false;
@@ -8302,6 +8334,13 @@ export function CityView({
   useEffect(() => {
     if (serveKey) api.current?.serveFood(serveKey.split("|")[0].split(","));
   }, [serveKey]);
+  // Bottles brought to a table (anyone's, in this club).
+  const bottlesKey = bottles ? `${bottles.seat}|${bottles.ids.join(",")}|${bottles.name}|${bottles.at}` : "";
+  useEffect(() => {
+    if (!bottlesKey) return;
+    const [seat, ids, name] = bottlesKey.split("|");
+    api.current?.bottleParade(seat, ids.split(","), name);
+  }, [bottlesKey]);
   // A planned home's Floor button.
   const homeFloorKey = homeFloorTo ? `${homeFloorTo.to}|${homeFloorTo.at}` : "";
   useEffect(() => {

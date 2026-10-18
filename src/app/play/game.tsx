@@ -603,6 +603,9 @@ export function Game({
   const [homeFloorTo, setHomeFloorTo] = useState<{ to: number; at: number } | null>(null);
   /** Food paid for at your table: the waiter brings it (src/app/play/city/serve.ts). */
   const [serve, setServe] = useState<{ ids: string[]; at: number } | null>(null);
+  /** Bottles on their way to a seat in this club (yours or someone else's): the hostesses' parade. */
+  const [bottles, setBottles] = useState<{ seat: string; ids: string[]; name: string; at: number } | null>(null);
+  const paradeTo = useCallback((seat: string, ids: string[], name: string) => setBottles((b) => ({ seat, ids, name: name.replace(/\|/g, " "), at: (b?.at ?? 0) + 1 })), []);
   const [townNew, setTownNew] = useState(false);
   // The new 3D studio, while it is being tried out (see avatar3d-flag.ts).
   // (Read in the browser only; it matters only once the studio is opened, so the server's false is harmless.)
@@ -2424,6 +2427,7 @@ export function Game({
             onHomeFloors={setHomeFloors}
             homeFloorTo={homeFloorTo}
             serve={serve}
+            bottles={bottles}
             onBubbleSignIn={guest ? () => setSignInWhy("Sign in to go into places, meet people and play.") : undefined}
             gateIn={gateIn}
             centerRef={worldId ? worldLife.centerRef : undefined}
@@ -2582,7 +2586,7 @@ export function Game({
       {/* Inside a place: mint spraying, the jukebox, duel invites and room news. */}
       {meP && rooms.myRoom && (
         <Safe name="Room activity">
-          <RoomActivityLayer roundId={actRound} roomId={rooms.myRoom} me={meP} />
+          <RoomActivityLayer roundId={actRound} roomId={rooms.myRoom} me={meP} onBottles={(m) => paradeTo(m.seat, m.ids, m.name)} />
         </Safe>
       )}
 
@@ -3372,6 +3376,9 @@ export function Game({
               perMint: worldRegion?.prices.perMint ?? 1_500,
               onServed: (ids) => setServe((r) => ({ ids, at: (r?.at ?? 0) + 1 })),
               onPaid: () => startTransition(() => router.refresh()),
+              seat: rooms.mySeat,
+              door: place?.building ? clubEntryNaira(place.building, placeRoom?.type, clubDoorOf(place.building)) : 0,
+              onBottles: (ids) => rooms.mySeat && paradeTo(rooms.mySeat, ids, me.name ?? "VIP"),
             }}
             onUseStairs={
               placeRoom && (placeRoom.levels?.length ?? 0) > 1
