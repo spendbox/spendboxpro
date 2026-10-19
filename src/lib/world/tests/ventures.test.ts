@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MOMENTS, pickMoment, ventureFits } from "../moments.ts";
 import { lifeFacts, LIFE_BADGES } from "../standing.ts";
-import { VENTURE_KINDS, VENTURE_STAGES, applyChange, capacity, goneUnder, inCrisis, newVenture, readyToGrow, ventureDay, ventureDays, ventureHourly, type Venture } from "../ventures.ts";
+import { EARNINGS_BOOST, VENTURE_KINDS, VENTURE_STAGES, applyChange, capacity, goneUnder, inCrisis, newVenture, readyToGrow, ventureDay, ventureDays, ventureHourly, type Venture } from "../ventures.ts";
 
 // A steady little random, so runs are the same every time.
 function rng(seed = 7) {
@@ -29,7 +29,7 @@ test("a well-run business grows, is ready for the next stage within a couple of 
       // Hire when the queue is out of the door.
       if (v.customers > capacity(v)) v = { ...v, staff: v.staff + 1 };
       const d = ventureDay(v, rand);
-      assert.ok(d.pay <= VENTURE_STAGES[v.stage].cap, `${k.id}: paid over the cap`);
+      assert.ok(d.pay <= VENTURE_STAGES[v.stage].cap * EARNINGS_BOOST, `${k.id}: paid over the cap`);
       assert.ok(d.pay >= 0);
       v = d.venture;
       if (readyToGrow(v)) ready = day;

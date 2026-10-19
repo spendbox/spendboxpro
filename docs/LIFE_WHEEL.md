@@ -283,8 +283,8 @@ stages: **Idea → Stall → Shop → Brand → Empire**.
 - **Real players:** they can be your customers, suppliers, partners, rivals or investors.
 - **On the map:** a business that reaches Shop can take a real building (`docs/BUSINESS.md`), and
   its sign goes up.
-- **The economy stays fair:** income comes out of the World Bank like other earnings, with caps per
-  stage, so businesses can't print money.
+- **What it pays you is 750× your share** of its profit (`EARNINGS_BOOST`; the stage caps are 750×
+  too). The business's own cash and growth are unchanged; only what reaches your wallet is bigger.
 
 ## 8. Other players in your story
 

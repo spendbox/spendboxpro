@@ -2,7 +2,7 @@
 // a buka, a POS kiosk, a tech startup...) and it grows in stages, Idea → Stall → Shop → Brand →
 // Empire, or fails. Each business has numbers you don't see directly (customers, quality, staff
 // mood, risk, its own cash), shown to you in words. Every day it makes or loses money; when it makes
-// some you're paid your share, up to a cap for its stage (so businesses can't print money). Business
+// some you're paid your share (EARNINGS_BOOST times it), up to a cap for its stage. Business
 // moments, two or three a week, test you (./venture-moments.ts), and what you choose moves the
 // numbers. If its cash runs out there's a crisis; get it wrong and it closes. Failing isn't the end:
 // you keep your home, and you can start again. You can run several at once (up to MAX_VENTURES).
@@ -68,6 +68,11 @@ export const SERVES = { owner: 20, staff: 25 };
 export const MAX_CATCH_UP_DAYS = 7;
 /** Your share of a good day's profit (the rest stays in the business, to grow it). */
 export const DRAW = 0.6;
+/**
+ * What a business pays you is this many times your share of its profit (and its stage's cap too):
+ * the business's own numbers stay as they are, only what reaches your wallet is bigger.
+ */
+export const EARNINGS_BOOST = 750;
 
 /** A business's numbers. */
 export type Venture = {
@@ -124,7 +129,7 @@ export function ventureDay(v: Venture, rand: () => number): { venture: Venture; 
   const full = v.customers > capacity(v) ? -0.01 : 0;
   // A new business finds its first customers one by one.
   const customers = clamp(v.customers * (1 + spread + full) + (spread > 0 && v.stage === 0 ? 0.5 : 0), 0, st.room * 1.2);
-  const pay = profit > 0 ? Math.min(st.cap, profit * DRAW * v.share) : 0;
+  const pay = profit > 0 ? Math.min(st.cap * EARNINGS_BOOST, profit * DRAW * v.share * EARNINGS_BOOST) : 0;
   const kept = profit > 0 ? profit - profit * DRAW * v.share : profit;
   const next: Venture = {
     ...v,
