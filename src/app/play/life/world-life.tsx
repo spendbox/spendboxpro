@@ -152,6 +152,7 @@ export function useWorldLife({
   meName,
   onTripFailed,
   onWallet,
+  lite = false,
 }: {
   api: PropertyApi;
   regionId: string | null;
@@ -159,6 +160,12 @@ export function useWorldLife({
   budget: number;
   /** The world lab: payments are pretend. */
   pretend?: boolean;
+  /**
+   * Lite (docs/LITE.md): there's no map, so nothing is looked up just for drawing it (how tall the
+   * city has grown, marks, breaking news over the map, the map's sums worked out ahead), and the
+   * businesses (for Lite's ad) only every 15 minutes.
+   */
+  lite?: boolean;
   onChanged?: () => void;
   /** Go inside a building (the game's insides); left out where there are none (the test page). */
   onEnter?: (buildingId: string) => void;
@@ -183,7 +190,7 @@ export function useWorldLife({
   // as tall as the server prices them. Asked when the city opens, and every ten minutes.
   const [growth, setGrowthNow] = useState(0);
   useEffect(() => {
-    if (!regionId || pretend) return;
+    if (!regionId || pretend || lite) return;
     let alive = true;
     const ask = () =>
       void fetch(`/api/city-growth?region=${regionId}`)
@@ -200,7 +207,7 @@ export function useWorldLife({
       alive = false;
       stop();
     };
-  }, [regionId, pretend]);
+  }, [regionId, pretend, lite]);
   const { assets, owned, loaded, refresh } = useLife(api, signedIn ? regionId : null, meName);
   const [property, setProperty] = useState<PropertyInfo | null>(null);
   const [owners, setOwners] = useState<BuildingOwner[] | null>(null);
@@ -390,8 +397,8 @@ export function useWorldLife({
   /** Breaking news: a story pops up at the top with a little bleep when it comes in (once each). */
   const [breaking, setBreaking] = useState<NewsItem | null>(null);
   useEffect(() => {
-    // Signed out: no breaking news popping up.
-    if (!region || pretend || !signedIn) return;
+    // Signed out: no breaking news popping up (nor in Lite: it pops up over the map).
+    if (!region || pretend || !signedIn || lite) return;
     const look = () => {
       if (document.visibilityState !== "visible") return;
       const latest = cityNews(region, Date.now(), 1)[0];
@@ -436,7 +443,7 @@ export function useWorldLife({
       clearTimeout(firstP);
       clearInterval(everyP);
     };
-  }, [region, pretend, signedIn]);
+  }, [region, pretend, signedIn, lite]);
   useEffect(() => {
     if (!breaking) return;
     const t = setTimeout(() => setBreaking(null), 9000);
@@ -453,14 +460,14 @@ export function useWorldLife({
     void around<MapMark[]>("marks", regionId, c.x, c.z).then((m) => m && setMarks(m)).catch(() => {});
   }, [regionId, pretend, signedIn]);
   useEffect(() => {
-    if (!regionId || pretend || !signedIn) return;
+    if (!regionId || pretend || !signedIn || lite) return;
     const first = setTimeout(loadMarks, 2500);
     const every = whileHere(loadMarks, 3 * 60_000);
     return () => {
       clearTimeout(first);
       every();
     };
-  }, [regionId, pretend, signedIn, loadMarks]);
+  }, [regionId, pretend, signedIn, lite, loadMarks]);
   /** Your reputation (shown at the top) and whether you own a car (to drive to work). */
   const [rep, setRep] = useState<{ score: number; hasCar: boolean; jail: string | null } | null>(null);
   /** Drive your own car to places (remembered on this phone), when you have one. */
@@ -525,7 +532,7 @@ export function useWorldLife({
   // Get the heavy map work done while nothing else is happening, so screens that need it (Income's
   // jobs near you, the fares to islands) open at once instead of working it out on the tap.
   useEffect(() => {
-    if (!region) return;
+    if (!region || lite) return;
     const warm = () => {
       planOf(region);
       ferryKmBetween(`${region.region.id}:0,0`, `${region.region.id}:1,1`);
@@ -534,7 +541,7 @@ export function useWorldLife({
     const idle = "requestIdleCallback" in window;
     const t = idle ? window.requestIdleCallback(warm, { timeout: 8000 }) : window.setTimeout(warm, 4000);
     return () => (idle ? window.cancelIdleCallback(t) : window.clearTimeout(t));
-  }, [region]);
+  }, [region, lite]);
 
   // Real businesses on the map (everyone sees them, signed in or not).
   useEffect(() => {
@@ -542,13 +549,13 @@ export function useWorldLife({
     let alive = true;
     const load = () => void api.mapBusinesses(regionId).then((list) => alive && setBusinesses(list)).catch(() => {});
     const first = setTimeout(load, 0);
-    const every = whileHere(load, 5 * 60_000);
+    const every = whileHere(load, (lite ? 15 : 5) * 60_000);
     return () => {
       alive = false;
       clearTimeout(first);
       every();
     };
-  }, [api, regionId]);
+  }, [api, regionId, lite]);
 
   // A link to a spot (?at=x,z, from the map reports page): fly there.
   useEffect(() => {

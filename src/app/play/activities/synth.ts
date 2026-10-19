@@ -22,8 +22,15 @@ let comp: DynamicsCompressorNode | null = null;
 let viaElement: { dest: MediaStreamAudioDestinationNode; el: HTMLAudioElement } | null = null;
 let noiseBuf: AudioBuffer | null = null;
 
+/** Lite (docs/LITE.md): no music or notes made here at all (set by the game). */
+let quietOn = false;
+export function setSynthQuiet(on: boolean) {
+  quietOn = on;
+  if (on) stopCurrent?.();
+}
+
 function engine() {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || quietOn) return null;
   if (!ctx) {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return null;

@@ -73,7 +73,7 @@ import { DuelStatus } from "./ghost-duel/duel-status";
 import type { Sport } from "@/lib/sports/types";
 import type { ActivityItem } from "./activities/games";
 import { useActivityRoom } from "./activities/hub";
-import { playLoop } from "./activities/synth";
+import { playLoop, setSynthQuiet } from "./activities/synth";
 import { isDanceMove, syncBeat, type DanceMove } from "./city/dance-moves";
 import { npcsFor } from "@/lib/npcs";
 import { addFriend } from "./friend-actions";
@@ -682,6 +682,7 @@ export function Game({
     api: PROPERTY_API,
     regionId: worldId,
     signedIn: !state.me.guest,
+    lite: !cityAllowed,
     budget: 5000,
     onChanged: () => startTransition(() => router.refresh()),
     // Home from inside a building: out of it first.
@@ -875,7 +876,10 @@ export function Game({
   const huntProgress = round && phase === "seek"
     ? Math.min(1, Math.max(0, (now - Date.parse(round.joinEndsAt)) / (Date.parse(round.seekEndsAt) - Date.parse(round.joinEndsAt))))
     : phase === "done" ? 1 : 0;
-  useCitySound(sound, roundSeed, huntProgress);
+  // Lite (docs/LITE.md) makes no sound of its own: no city, no effects, no music (until the phone
+  // has said it isn't in Lite, nothing starts either).
+  const soundOn = sound && cityAllowed;
+  useCitySound(soundOn, roundSeed, huntProgress);
   // The real map's weather comes from its news (src/lib/world/news.ts), changing every 3 hours.
   const weatherSlot = Math.floor(now / (3 * 3_600_000));
   const cityWeather = useMemo(() => {
@@ -913,9 +917,9 @@ export function Game({
   }, [inClub, dancing]);
   // The club's music while you dance (when sounds are on); everyone moves in time with it.
   useEffect(() => {
-    if (!isDancing || !sound) return;
+    if (!isDancing || !soundOn) return;
     return playLoop("disco", { seconds: 900, volume: 0.8, onBeat: syncBeat });
-  }, [isDancing, sound]);
+  }, [isDancing, soundOn]);
   function startDancing(move?: DanceMove) {
     if (me.guest) return setSignInWhy("Sign in to dance here.");
     if (rooms.mySeat) rooms.stand();
@@ -961,19 +965,21 @@ export function Game({
     };
     const first = setTimeout(look, 800);
     // Every 90 s while you're playing (and when you come back); moving to a new area looks at once.
-    const stop = whileHere(look, 90_000);
+    // Lite has no faces on a map (only chat's "online now"): every 5 minutes is enough.
+    const stop = whileHere(look, cityAllowed ? 90_000 : 5 * 60_000);
     return () => {
       alive = false;
       clearTimeout(first);
       stop();
     };
     // A new area: look again (the people round here show under the menu).
-  }, [worldId, me.guest, worldLife.centerRef, worldArea]);
+  }, [worldId, me.guest, worldLife.centerRef, worldArea, cityAllowed]);
   // How many are in each place round where you're looking (the server's, game-db/127): every 90 s,
   // and when you look somewhere new. Your own place's number is the live one (rooms.ts).
   const [serverCounts, setServerCounts] = useState<Record<string, number>>({});
   useEffect(() => {
-    if (!worldId) return;
+    // The numbers are drawn over the map's buildings: none to look up in Lite.
+    if (!worldId || !cityAllowed) return;
     let alive = true;
     const look = () => {
       const c = worldLife.centerRef.current?.() ?? spotRef.current ?? { x: 0, z: 0 };
@@ -986,7 +992,7 @@ export function Game({
       clearTimeout(first);
       stop();
     };
-  }, [worldId, worldLife.centerRef, worldArea]);
+  }, [worldId, worldLife.centerRef, worldArea, cityAllowed]);
   const placeCounts = useMemo(() => {
     if (!worldId) return rooms.buildingCounts;
     const out: Record<string, number> = {};
@@ -1259,9 +1265,10 @@ export function Game({
     return () => clearTimeout(id);
   }, [fewLeft]);
   useEffect(() => {
-    setSfxEnabled(sound);
-    setEventSoundsEnabled(sound);
-  }, [sound]);
+    setSfxEnabled(soundOn);
+    setEventSoundsEnabled(soundOn);
+    setSynthQuiet(!cityAllowed);
+  }, [soundOn, cityAllowed]);
   // Seats: your 3 minutes are up, or someone sat down just before you.
   const seatNotice = rooms.seatNotice;
   const clearSeatNotice = rooms.clearSeatNotice;
@@ -4356,7 +4363,8 @@ export function Game({
                 { label: "Start the guide", icon: Lightbulb, colour: "#f08c00", go: () => worldLife.restartGuide() },
                 { label: "Notifications", icon: BellRing, colour: "#f08c00", go: () => setAlertsOpen(true) },
                 { label: "Currency", icon: Coins, colour: "#f59f00", go: () => worldLife.openCurrency() },
-                { label: sound ? "Sound off" : "Sound on", icon: sound ? VolumeX : Volume2, colour: "#495057", go: () => { setSound(!sound); saveView({ sound: !sound }); } },
+                // Lite is always quiet: no sound switch there.
+                ...(lite ? [] : [{ label: sound ? "Sound off" : "Sound on", icon: sound ? VolumeX : Volume2, colour: "#495057", go: () => { setSound(!sound); saveView({ sound: !sound }); } }]),
                 { label: "Report", icon: Flag, colour: "#868e96", go: () => worldLife.openReport() },
                 { label: "Sign out", icon: LogOut, colour: "#495057", go: () => setConfirmSignOut(true) },
               ],

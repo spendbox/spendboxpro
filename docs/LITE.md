@@ -6,6 +6,17 @@ and events; the city just isn't drawn (it isn't even loaded). The World is one t
 
 Code: `src/app/play/lite/`, wired in `src/app/play/game.tsx` (look for "Lite").
 
+## Quiet and light
+
+- **No sound.** Lite makes none of its own: no city sounds, no sound effects or chimes, no
+  minigame sounds, no party beat or piano (`setSynthQuiet`), and there's no Sound switch in the
+  menu. Only what you start yourself plays: a voice note you tap, a voice call you join, and the
+  DJ's songs inside a party you go into.
+- **No map.** The 3D city's code is never downloaded, and nothing is looked up just to draw it:
+  no busy-ness numbers over buildings, how tall the city has grown, marks, breaking news over the
+  map, or the map's sums worked out ahead. Who's around is asked every 5 minutes instead of 90
+  seconds (for chat's "online now"), and the businesses (for the ad) every 15 minutes.
+
 ## Switching
 
 - In the world: the **Lite** pill (bottom right, above the Town Hall), and once, 25 seconds in, a
