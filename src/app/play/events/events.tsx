@@ -90,6 +90,7 @@ export function Events({
   where,
   places,
   home,
+  houseParty = false,
   describe,
   roads,
   onLights,
@@ -110,6 +111,8 @@ export function Events({
   places: () => ExplorePlace[];
   /** Your home on the map (for a party at your house), or null with no home. */
   home?: { x: number; z: number; name: string } | null;
+  /** Opened from your home's card: straight to hosting a house party there. */
+  houseParty?: boolean;
   describe: (x: number, z: number) => SpotWords;
   /** Named roads round a spot, nearest first. */
   roads: (x: number, z: number) => NearRoad[];
@@ -309,6 +312,7 @@ export function Events({
           where={where}
           places={places}
           home={home ?? null}
+          houseParty={houseParty && !!home}
           describe={describe}
           roads={roads}
           onClose={() => {
@@ -444,6 +448,7 @@ function EventsSheet({
   where,
   places,
   home,
+  houseParty,
   describe,
   roads,
   onClose,
@@ -458,6 +463,8 @@ function EventsSheet({
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
   home: { x: number; z: number; name: string } | null;
+  /** Straight to hosting a house party at your home (from your home's card). */
+  houseParty: boolean;
   describe: (x: number, z: number) => SpotWords;
   roads: (x: number, z: number) => NearRoad[];
   onClose: () => void;
@@ -467,13 +474,14 @@ function EventsSheet({
   onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
 }) {
   const [intro, setIntro] = useState(() => {
+    if (houseParty) return false;
     try {
       return !localStorage.getItem(INTRO_KEY);
     } catch {
       return true;
     }
   });
-  const [tab, setTab] = useState<Tab>("on");
+  const [tab, setTab] = useState<Tab>(houseParty ? "host" : "on");
   const [shelf, setShelf] = useState<Shelf>("all");
   // Choose on the map: the card tucks away (all you've filled in kept), a pin in the middle of the
   // screen shows where and how far the party reaches, and Use this spot brings the card back.
@@ -583,7 +591,7 @@ function EventsSheet({
           </span>
         </button>
         {guide && <HostGuide onClose={() => setGuide(false)} />}
-        <HostForm region={region} where={where} places={places} home={home} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
+        <HostForm region={region} where={where} places={places} home={home} houseParty={houseParty} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
         </>
       )}
     </Sheet>
@@ -660,6 +668,7 @@ function HostForm({
   where,
   places,
   home,
+  houseParty,
   describe,
   roads,
   onOpen,
@@ -671,6 +680,8 @@ function HostForm({
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
   home: { x: number; z: number; name: string } | null;
+  /** Start as a house party at your home, at its name. */
+  houseParty?: boolean;
   describe: (x: number, z: number) => SpotWords;
   roads: (x: number, z: number) => NearRoad[];
   onOpen: (id: number) => void;
@@ -685,9 +696,9 @@ function HostForm({
     void eventQuote(region).then(setQuote).catch(() => setQuote(null));
   }, [region]);
   const [cat, setCat] = useState<EventCategoryId>("party");
-  const [formatId, setFormatId] = useState("street_party");
+  const [formatId, setFormatId] = useState(houseParty ? "house_party" : "street_party");
   const f = eventFormat(formatId) as EventFormat;
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(houseParty ? "House party" : "");
   const [about, setAbout] = useState("");
   const [venueKey, setVenueKey] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -713,7 +724,7 @@ function HostForm({
   /** Uploading the slides after it's made ("Adding slide 2 of 5…"). */
   const [loadingStage, setLoadingStage] = useState<string | null>(null);
   /** Which screen of the form (see `steps`). */
-  const [stepAt, setStepAt] = useState(0);
+  const [stepAt, setStepAt] = useState(houseParty ? 1 : 0);
 
   // Where it can be: any named road round the middle of your screen (move the map and look again
   // to pick another), and the places round you (those that suit it first).

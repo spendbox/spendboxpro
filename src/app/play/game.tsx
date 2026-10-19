@@ -2141,6 +2141,16 @@ export function Game({
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
+  /** Events opened from your home's card: straight to hosting a house party there. */
+  const [houseParty, setHouseParty] = useState(false);
+  useEffect(() => {
+    const host = () => {
+      setHouseParty(true);
+      setEventsOpen(true);
+    };
+    window.addEventListener("nt-host-house-party", host);
+    return () => window.removeEventListener("nt-host-house-party", host);
+  }, []);
   const [eventLights, setEventLights] = useState<EventLight[]>([]);
   // An event's beam (or its bubble) tapped on the map: open that event.
   const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
@@ -2860,10 +2870,14 @@ export function Game({
           region={worldId}
           me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
           open={eventsOpen}
-          onClose={() => setEventsOpen(false)}
+          onClose={() => {
+            setEventsOpen(false);
+            setHouseParty(false);
+          }}
           where={() => worldLife.centerRef.current?.() ?? null}
           places={worldLife.explore}
           home={homeForParty}
+          houseParty={houseParty}
           describe={worldLife.describeSpot}
           roads={worldLife.roadsNear}
           openId={eventTapped}
