@@ -33,8 +33,8 @@ export type EventFormat = {
   minutes: number;
   /** The usual most people. */
   capacity: number;
-  /** Where it suits best: "street" (the road you're on) and/or groups of places (src/lib/world/explore.ts). */
-  suits: ("street" | "nightlife" | "parks" | "shopping" | "food" | "culture" | "sport" | "travel")[];
+  /** Where it suits best: "home" (your own), "street" (the road you're on) and/or groups of places (src/lib/world/explore.ts). */
+  suits: ("home" | "street" | "nightlife" | "parks" | "shopping" | "food" | "culture" | "sport" | "travel")[];
 };
 
 export const EVENT_FORMATS: EventFormat[] = [
@@ -42,7 +42,7 @@ export const EVENT_FORMATS: EventFormat[] = [
   { id: "owambe", category: "party", title: "Owambe", icon: "👑", blurb: "Aso ebi, jollof and spraying the celebrant. A birthday, a wedding, any excuse.", scene: "owambe", minutes: 180, capacity: 300, suits: ["street", "food", "parks"] },
   { id: "concert", category: "party", title: "Concert", icon: "🎸", blurb: "A stage, a crowd, and you (or your favourite act) on the mic.", scene: "street_concert", minutes: 120, capacity: 1000, suits: ["street", "sport", "parks"] },
   { id: "rave", category: "party", title: "Rave", icon: "🪩", blurb: "A DJ in the middle of the road, lasers, and dancing until it ends.", scene: "street_rave", minutes: 180, capacity: 1000, suits: ["street", "nightlife"] },
-  { id: "house_party", category: "party", title: "House party", icon: "🏠", blurb: "Small, warm and close: your friends and theirs, candles and good music.", scene: "blackout_party", minutes: 120, capacity: 40, suits: ["street", "food"] },
+  { id: "house_party", category: "party", title: "House party", icon: "🏠", blurb: "Small, warm and close: your friends and theirs, candles and good music.", scene: "blackout_party", minutes: 120, capacity: 40, suits: ["home", "street", "food"] },
   { id: "drum_circle", category: "party", title: "Drum circle", icon: "🥁", blurb: "Drums, call and response, and everyone joining in.", scene: "drumming_circle", minutes: 60, capacity: 200, suits: ["parks", "street", "culture"] },
   { id: "talk", category: "stage", title: "Talk", icon: "🎙️", blurb: "You speak, with slides. Everyone sits, listens, reacts and asks questions.", scene: null, minutes: 60, capacity: 300, suits: ["culture", "food", "street"] },
   { id: "class", category: "stage", title: "Class or workshop", icon: "📚", blurb: "Teach something: cooking, coding, makeup, money. Slides and questions.", scene: null, minutes: 60, capacity: 100, suits: ["culture", "food"] },
@@ -363,6 +363,8 @@ export const isBigParty = (radiusM: number, capacity: number) => radiusM >= BIG_
 export const capacityK = (capacity: number) => (CAPACITY_COST.find((c) => capacity <= c.max) ?? CAPACITY_COST[CAPACITY_COST.length - 1]).k;
 /** What kind of place it's at, and how that multiplies the price. */
 export const VENUE_COST = {
+  /** Your own home (a house party): priced like a street. */
+  home: { k: 1, label: "Your home" },
   street: { k: 1, label: "A street" },
   outdoors: { k: 1.2, label: "A park or square" },
   food: { k: 1.5, label: "A restaurant or hotel" },

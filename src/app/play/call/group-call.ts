@@ -740,6 +740,8 @@ export function useGroupCall(room: string | null, me: CallMe | null, opts: { max
     joining,
     /** A friendly line about what went wrong (mic blocked, call full...), or null. */
     error,
+    /** Hide the error line (the ✕ on it). */
+    clearError: () => setError(null),
     /** Everyone in the call: you first once you've joined. Before you join, who's already in. */
     people,
     /** Join the call. Call it from a tap. */

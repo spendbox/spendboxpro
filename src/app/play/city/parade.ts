@@ -2,12 +2,14 @@
 // in from the way in, single file, each holding a bottle up high with a sparkler fizzing on top,
 // the first one carrying a light-up LED sign with the buyer's name. They stop round the table,
 // dance a moment with the bottles up, set them down in an ice bucket (the sparklers fizz on a while)
-// and walk back out. Everyone in the club sees it. Drawn in the room's own metres, in its holder.
+// and walk back out (to someone standing, they hand them over: no bucket). Everyone in the club
+// sees it. Drawn in the room's own metres, in its holder.
 
 import * as THREE from "three";
 import type { BottleLook } from "@/lib/world/bottles";
 
-type Seat = { x: number; z: number; ry: number };
+/** Where the buyer is and which way they face; standing: no table, nothing set down. */
+type Seat = { x: number; z: number; ry: number; standing?: boolean };
 
 const geo = {
   leg: new THREE.CylinderGeometry(0.045, 0.035, 0.8, 8).translate(0, 0.4, 0),
@@ -283,6 +285,7 @@ export function createParades(holder: THREE.Object3D, room: THREE.Object3D, door
 
   /** The bucket on the table, the bottles in the ice, their sparklers still going a while. */
   function setDown(p: Parade) {
+    if (p.seat.standing) return;
     const fx = Math.sin(p.seat.ry);
     const fz = Math.cos(p.seat.ry);
     const x = p.seat.x + fx * 0.5;

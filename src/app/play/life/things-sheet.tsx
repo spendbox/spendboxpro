@@ -410,7 +410,7 @@ function Assets({
   );
 }
 
-/** Your business (docs/LIFE_WHEEL.md): the one you run now, and the ones you ran before. Tap to open it. */
+/** Your businesses (docs/LIFE_WHEEL.md): the ones you run now (what each makes an hour), and the ones you ran before. Tap to open them. */
 function Businesses({ onOpen }: { onOpen?: () => void }) {
   const [career, setCareer] = useState<Career | null | undefined>(undefined);
   useEffect(() => {
@@ -422,33 +422,46 @@ function Businesses({ onOpen }: { onOpen?: () => void }) {
       alive = false;
     };
   }, []);
-  const open = () => {
+  const openCareer = () => {
     window.dispatchEvent(new Event("nt-open-career"));
     onOpen?.();
   };
   if (career === undefined) return <div className="mt-3 h-16 animate-pulse rounded-2xl bg-ink/5" />;
   if (!career || career.missing) return null;
-  const v = career.open?.venture;
-  const kind = v ? VENTURE_KIND_BY_ID.get(v.kind) : null;
+  const running = career.open;
   return (
     <div className="mt-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-muted">Business</p>
-      {v ? (
-        <button onClick={open} className="mt-2 flex w-full items-center gap-3 rounded-2xl bg-[#7048e8]/10 px-3 py-3 text-left hover:bg-[#7048e8]/15">
-          <span className="text-2xl">{kind?.emoji ?? "💼"}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold">{v.name}</span>
-            <span className="block text-xs text-muted">
-              {kind?.name ?? "Business"} · {VENTURE_STAGES[v.stage]?.name ?? ""} · {Math.round(v.customers).toLocaleString("en-GB")} {kind?.customers ?? "customers"}
-            </span>
-          </span>
-          <span className="shrink-0 text-right">
-            <b className="block text-sm tabular-nums text-[#2b8a3e]">{cash(v.paid / career.perMint)}</b>
-            <span className="block text-[10px] text-muted">paid you</span>
-          </span>
-        </button>
+      <p className="text-xs font-bold uppercase tracking-wide text-muted">{running.length > 1 ? `Businesses · ${running.length}` : "Business"}</p>
+      {running.length ? (
+        <div className="mt-2 space-y-1.5">
+          {running.map((b) => {
+            const v = b.venture;
+            const kind = VENTURE_KIND_BY_ID.get(v.kind);
+            const losing = b.hourly.profit < 0;
+            return (
+              <button key={b.id} onClick={openCareer} className="flex w-full items-center gap-3 rounded-2xl bg-[#7048e8]/10 px-3 py-3 text-left hover:bg-[#7048e8]/15">
+                <span className="text-2xl">{kind?.emoji ?? "💼"}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold">{v.name}</span>
+                  <span className="block text-xs text-muted">
+                    {kind?.name ?? "Business"} · {VENTURE_STAGES[v.stage]?.name ?? ""} · paid you {cash(v.paid / career.perMint)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <b className={`block text-sm tabular-nums ${losing ? "text-hit" : "text-[#2b8a3e]"}`}>{losing ? `−${cash(-b.hourly.profit / career.perMint)}` : cash(b.hourly.pay / career.perMint)}</b>
+                  <span className="block text-[10px] text-muted">{losing ? "losing an hour" : "an hour"}</span>
+                </span>
+              </button>
+            );
+          })}
+          {running.length < career.max && (
+            <button onClick={openCareer} className="w-full rounded-2xl bg-ink/[0.04] px-4 py-2.5 text-center text-sm font-semibold hover:bg-ink/[0.07]">
+              Start another business
+            </button>
+          )}
+        </div>
       ) : (
-        <button onClick={open} className="mt-2 w-full rounded-2xl bg-ink/[0.04] px-4 py-4 text-center text-sm text-muted hover:bg-ink/[0.07]">
+        <button onClick={openCareer} className="mt-2 w-full rounded-2xl bg-ink/[0.04] px-4 py-4 text-center text-sm text-muted hover:bg-ink/[0.07]">
           No business running. <b className="text-ink">Start one</b>: a suya spot, a salon, a tech startup...
         </button>
       )}

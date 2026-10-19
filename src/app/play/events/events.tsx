@@ -89,6 +89,7 @@ export function Events({
   onClose,
   where,
   places,
+  home,
   describe,
   roads,
   onLights,
@@ -107,6 +108,8 @@ export function Events({
   where: () => { x: number; z: number } | null;
   /** Places nearby to hold an event at (landmarks, restaurants, parks...). */
   places: () => ExplorePlace[];
+  /** Your home on the map (for a party at your house), or null with no home. */
+  home?: { x: number; z: number; name: string } | null;
   describe: (x: number, z: number) => SpotWords;
   /** Named roads round a spot, nearest first. */
   roads: (x: number, z: number) => NearRoad[];
@@ -305,6 +308,7 @@ export function Events({
           now={now}
           where={where}
           places={places}
+          home={home ?? null}
           describe={describe}
           roads={roads}
           onClose={() => {
@@ -439,6 +443,7 @@ function EventsSheet({
   now,
   where,
   places,
+  home,
   describe,
   roads,
   onClose,
@@ -452,6 +457,7 @@ function EventsSheet({
   now: number;
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
+  home: { x: number; z: number; name: string } | null;
   describe: (x: number, z: number) => SpotWords;
   roads: (x: number, z: number) => NearRoad[];
   onClose: () => void;
@@ -577,7 +583,7 @@ function EventsSheet({
           </span>
         </button>
         {guide && <HostGuide onClose={() => setGuide(false)} />}
-        <HostForm region={region} where={where} places={places} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
+        <HostForm region={region} where={where} places={places} home={home} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
         </>
       )}
     </Sheet>
@@ -653,6 +659,7 @@ function HostForm({
   region,
   where,
   places,
+  home,
   describe,
   roads,
   onOpen,
@@ -663,6 +670,7 @@ function HostForm({
   region: string;
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
+  home: { x: number; z: number; name: string } | null;
   describe: (x: number, z: number) => SpotWords;
   roads: (x: number, z: number) => NearRoad[];
   onOpen: (id: number) => void;
@@ -732,6 +740,12 @@ function HostForm({
   }, [region]);
   const venues = useMemo<Venue[]>(() => {
     const out: Venue[] = [];
+    // Your own home: a house party (parties only; it's on the list wherever you are on the map).
+    if (home && cat === "party") {
+      const x = Math.round(home.x);
+      const z = Math.round(home.z);
+      out.push({ key: "home", name: home.name || "Your home", what: "Your home", x, z, street: false, dist: here ? Math.hypot(here.x - x, here.z - z) : 0, suits: f.suits.includes("home"), kind: "home", areaK: describe(x, z).areaK });
+    }
     for (const r of nearRoads) out.push({ key: `road:${r.name}`, name: `${r.name}, ${r.area}`, what: "On the street", x: r.x, z: r.z, street: true, dist: r.dist, suits: f.suits.includes("street"), kind: "street", areaK: r.areaK });
     if (here && !nearRoads.length) {
       const w = describe(Math.round(here.x), Math.round(here.z));
@@ -743,13 +757,16 @@ function HostForm({
       out.push({ key: p.id, name: p.name, what: p.what, x, z, street: false, dist: p.dist, suits: (f.suits as string[]).includes(p.group), kind: VENUE_OF_GROUP[p.group] ?? "outdoors", areaK: describe(x, z).areaK });
     }
     return out;
-  }, [here, nearby, nearRoads, describe, f]);
+  }, [here, nearby, nearRoads, describe, f, home, cat]);
   const words = q.trim().toLowerCase();
   const shownVenues = venues
     .filter((v) => !words || `${v.name} ${v.what}`.toLowerCase().includes(words))
-    .sort((a, b) => Number(b.street) - Number(a.street) || Number(b.suits) - Number(a.suits) || a.dist - b.dist)
+    .sort((a, b) => Number(b.key === "home") - Number(a.key === "home") || Number(b.street) - Number(a.street) || Number(b.suits) - Number(a.suits) || a.dist - b.dist)
     .slice(0, words ? 30 : 12);
-  const venue = venues.find((v) => v.key === venueKey) ?? (venueKey === null ? (venues.find((v) => v.street) ?? venues[0] ?? null) : null);
+  // Nothing picked yet: a house party is at your home, anything else on the street.
+  const venue =
+    venues.find((v) => v.key === venueKey) ??
+    (venueKey === null ? ((f.suits.includes("home") ? venues.find((v) => v.key === "home") : undefined) ?? venues.find((v) => v.street) ?? venues[0] ?? null) : null);
 
   const choices = useMemo(() => startChoices(opened.current), []);
   const startAt = startId === "custom" ? (custom ? new Date(custom).getTime() : NaN) : (choices.find((c) => c.id === startId)?.at ?? opened.current);

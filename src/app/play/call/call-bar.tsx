@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, MicOff, Phone, PhoneOff } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, X } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { cleanAvatar } from "@/lib/avatar";
 import { cn } from "@/lib/cn";
@@ -39,6 +39,18 @@ function Face({ p, size }: { p: CallPerson; size: number }) {
         {!p.connected ? ", connecting" : ""}
       </span>
     </span>
+  );
+}
+
+/** What went wrong (mic blocked, call full...), with a ✕ to hide it. */
+function CallError({ text, onClose }: { text: string; onClose: () => void }) {
+  return (
+    <p role="alert" className="glass flex max-w-[20rem] items-start gap-1.5 rounded-2xl py-1.5 pl-3 pr-1.5 text-xs font-medium text-hit">
+      <span className="min-w-0 flex-1">{text}</span>
+      <button type="button" onClick={onClose} aria-label="Close" className="grid size-5 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2">
+        <X className="size-3.5" />
+      </button>
+    </p>
   );
 }
 
@@ -102,9 +114,7 @@ export function CallBar({
           </button>
         </div>
         {call.error && (
-          <p role="alert" className="glass max-w-[20rem] rounded-2xl px-3 py-1.5 text-xs font-medium text-hit">
-            {call.error}
-          </p>
+<CallError text={call.error} onClose={call.clearError} />
         )}
       </div>
     );
@@ -135,9 +145,7 @@ export function CallBar({
         </button>
       </div>
       {call.error && (
-        <p role="alert" className="glass max-w-[20rem] rounded-2xl px-3 py-1.5 text-xs font-medium text-hit">
-          {call.error}
-        </p>
+<CallError text={call.error} onClose={call.clearError} />
       )}
     </div>
   );

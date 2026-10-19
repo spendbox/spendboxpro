@@ -14,8 +14,8 @@ import { questEvent, refreshQuest } from "./quest-store";
 import { BigButton, GameHeader, type GameProps } from "./ui";
 
 // Ordering at a table (docs/FOOD.md): food and drinks at real Lagos prices (dearer at a hotel or a
-// club than at a buka). Sit down first, pick up to six things, pay, and a waiter brings them to
-// your table and sets them down in front of you. The room hears what you're having, and now and
+// club than at a buka). Pick up to six things, pay, and a waiter brings them: to your table if you're
+// sitting, or into your hand where you're standing. The room hears what you're having, and now and
 // then the waiter slips you a side quest. In a club, bottle service too: a line of hostesses brings
 // the bottles with sparklers and your name on a light-up sign, and the whole club sees it.
 
@@ -68,8 +68,7 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
 
   async function orderTheBottles() {
     if (!bottles.length || busy) return;
-    if (!seated || !ordering?.seat) return setNote({ text: "Sit at a table first (tap a glowing seat in a booth), then order: the bottles come to you.", good: false });
-    if (!ordering.region || !ordering.place) return setNote({ text: "Bottle service is on the real map.", good: false });
+    if (!ordering?.region || !ordering.place) return setNote({ text: "Bottle service is on the real map.", good: false });
     setBusy(true);
     setNote(null);
     const r = await orderBottles(ordering.region, ordering.place, bottles).catch(() => ({ ok: false as const, error: "The connection blinked. Try again." }));
@@ -78,7 +77,8 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
     ordering.onPaid?.();
     playSfx("levelup");
     if (props.me) {
-      room.send({ t: "bottles", from: props.me, seat: ordering.seat, ids: bottles, naira: r.naira });
+      // Standing: the others hear about it, the hostesses come to you on your own screen.
+      room.send({ t: "bottles", from: props.me, seat: seated && ordering.seat ? ordering.seat : `${props.roomId}:standing`, ids: bottles, naira: r.naira });
       room.send({ t: "toast", icon: "drink", from: props.me.id, text: `🍾 ${props.me.name} ordered ${bottleWords(bottles)}!` });
     }
     // Here they come: close the menu so you can watch.
@@ -88,7 +88,6 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
 
   async function order() {
     if (!basket.length || busy) return;
-    if (!seated) return setNote({ text: "Sit down first: tap a glowing chair at a table, then order.", good: false });
     setBusy(true);
     setNote(null);
     // On the real map it's paid for; elsewhere (the old hourly game) it's on the house.
@@ -122,7 +121,7 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
       <GameHeader icon={UtensilsCrossed} title="Order food & drinks" sub={props.label} onClose={props.onClose} color="#e8590c" />
       {!seated && (
         <p className="flex items-center gap-2 rounded-2xl bg-gold/15 px-3 py-2 text-sm">
-          <Armchair className="size-4 shrink-0 text-gold-dark" /> Sit at a table first (tap a glowing chair), then order. The waiter brings it to you.
+          <Armchair className="size-4 shrink-0 text-gold-dark" /> Order standing and it&apos;s brought to you, or sit at a table (tap a glowing chair) to have it set down in front of you.
         </p>
       )}
       <div className="flex gap-1 rounded-full bg-ink/5 p-1">
@@ -167,7 +166,7 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
             })}
           </ul>
           {note && <p className={cn("rounded-xl px-3 py-2 text-sm font-semibold", note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit")}>{note.text}</p>}
-          <BigButton onClick={() => void orderTheBottles()} disabled={!bottles.length || busy || !seated}>
+          <BigButton onClick={() => void orderTheBottles()} disabled={!bottles.length || busy}>
             {busy ? <LoaderCircle className="size-5 animate-spin" /> : bottles.length ? `Bring ${bottles.length} bottle${bottles.length > 1 ? "s" : ""} · ${cash(bottleTotal)}` : "Pick your bottles"}
           </BigButton>
           {bLevel > 1 && <p className="text-center text-xs text-muted">Prices here are {bLevel}× an ordinary club&apos;s: it&apos;s that kind of club.</p>}
@@ -201,7 +200,7 @@ export function Order({ where, ordering, ...props }: GameProps & { where: "resta
         })}
       </ul>
       {note && <p className={cn("rounded-xl px-3 py-2 text-sm font-semibold", note.good ? "bg-me/10 text-me" : "bg-hit/10 text-hit")}>{note.text}</p>}
-      <BigButton onClick={() => void order()} disabled={!basket.length || busy || !seated}>
+      <BigButton onClick={() => void order()} disabled={!basket.length || busy}>
         {busy ? <LoaderCircle className="size-5 animate-spin" /> : basket.length ? `Order ${basket.length} for ${cash(total)}` : "Pick something to order"}
       </BigButton>
       {level > 1 && <p className="text-center text-xs text-muted">Prices here are {level}× a buka&apos;s: it&apos;s that kind of place.</p>}

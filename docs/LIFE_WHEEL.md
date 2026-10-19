@@ -271,6 +271,14 @@ stages: **Idea → Stall → Shop → Brand → Empire**.
   it". The first decision comes within six hours of starting.
 - **It pays daily** into your wallet (from customers, quality and stage), and a bad month loses
   money. If cash runs out there's a crisis moment; get it wrong and the business closes.
+- **Several at once** (up to 5, `MAX_VENTURES`, game-db/129): My businesses lists them all, each with
+  what it makes an hour on an ordinary day as it is now (`ventureHourly`: what it pays you, or what
+  it's losing, in red), and the total an hour. Each is paid for, earns and closes on its own; a
+  business moment is about the one whose decision is most pressing (one in crisis first), and says
+  which when you answer it.
+- **A tip before starting one:** "Money isn't unlimited": what it costs, what you'd have left, that
+  a business can lose money and close, to keep enough for food, rent and bills, and to grow one
+  before opening the next. Start it, or Not now.
 - **Failing isn't the end.** You keep your home and what you own; the *Comeback* story starts.
 - **Real players:** they can be your customers, suppliers, partners, rivals or investors.
 - **On the map:** a business that reaches Shop can take a real building (`docs/BUSINESS.md`), and

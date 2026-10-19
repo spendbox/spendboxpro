@@ -8,6 +8,7 @@ import { notifyMany } from "@/lib/notify-many";
 import { pushToMany } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { REGIONS, regionMap } from "@/lib/world";
+import { ownedSpot } from "@/lib/world/owned";
 import {
   DAYS_AHEAD,
   EARLY_DOORS_MINS,
@@ -83,6 +84,13 @@ const spotOf = (id: string | null) => {
   const m = /:(-?\d+),(-?\d+)/.exec(id ?? "");
   return m ? { x: Number(m[1]), z: Number(m[2]) } : null;
 };
+/** Where your home is on the map (its building), or null with no home. */
+async function homeOf(db: Db, userId: string | null) {
+  if (!userId) return null;
+  const { data } = await db.from("lives").select("home_unit").eq("user_id", userId).maybeSingle();
+  const sp = ownedSpot(String(data?.home_unit ?? "").split("/")[0]);
+  return sp ? { x: sp.x, z: sp.z } : null;
+}
 /** Where slides live (only pictures from here are shown on a stage). */
 const slideBase = (db: Db) => db.storage.from(SLIDE_BUCKET).getPublicUrl("x").data.publicUrl.replace(/x$/, "");
 
@@ -296,7 +304,10 @@ export async function myEventRep(): Promise<{ hosted: number; attended: number }
  * landmark, a famous spot; for an everyday place the map can't name here, what the phone says, but
  * never cheaper than a park. null: "on the street" but no road there.
  */
-function venueAt(region: string, x: number, z: number, onStreet: boolean, said: VenueKind): VenueKind | null {
+function venueAt(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, home: { x: number; z: number } | null = null): VenueKind | null {
+  // A party at your own home (on its spot): priced as a home. Anywhere else, "home" means nothing.
+  if (said === "home" && home && Math.abs(home.x - x) <= 1 && Math.abs(home.z - z) <= 1) return "home";
+  if (said === "home") said = "outdoors";
   const map = regionMap(region);
   if (!map) return said;
   const near = (f: (dx: number, dz: number) => boolean) => {
@@ -317,8 +328,8 @@ function venueAt(region: string, x: number, z: number, onStreet: boolean, said: 
 }
 
 /** What hosting a party costs (naira), worked out here from the map. null: not on a road. */
-function hostingNaira(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, minutes: number, capacity: number, radiusM: number) {
-  const venue = venueAt(region, x, z, onStreet, said);
+function hostingNaira(region: string, x: number, z: number, onStreet: boolean, said: VenueKind, minutes: number, capacity: number, radiusM: number, home: { x: number; z: number } | null = null) {
+  const venue = venueAt(region, x, z, onStreet, said, home);
   if (!venue) return null;
   const map = regionMap(region);
   return partyCost({ minutes, capacity, venue, area: map ? areaK(map.centres, x, z) : 1, radiusM }).naira;
@@ -329,7 +340,8 @@ const sizeOf = (radiusM: unknown) => PARTY_SIZES.find((s) => s.m === Math.round(
 /** What a party would cost to host (naira), for the host's form (the same sum as when it's hosted). */
 export async function partyPrice(input: { region: string; x: number; z: number; onStreet: boolean; venue: VenueKind; minutes: number; capacity: number; radiusM?: number }): Promise<number | null> {
   if (!REGIONS[input.region]) return null;
-  return hostingNaira(input.region, Math.round(input.x), Math.round(input.z), !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), partySize(n(input.radiusM)).m);
+  const home = input.venue === "home" ? await homeOf(createAdminClient(), await currentUserId()) : null;
+  return hostingNaira(input.region, Math.round(input.x), Math.round(input.z), !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), partySize(n(input.radiusM)).m, home);
 }
 
 /** Street parties on now or coming up (for the host's road list: which stretches are taken, and when). */
@@ -397,7 +409,8 @@ export async function hostEvent(input: NewEvent): Promise<{ ok: true; id: number
   if (!size) return say("bad_size");
   if (f.category === "party" && Math.round(n(input.capacity)) > size.most) return { ok: false, error: `A party that size holds up to ${size.most.toLocaleString("en-GB")} people. Pick a bigger size for more.` };
   if (f.category === "party") {
-    const naira = hostingNaira(region, x, z, !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), size.m);
+    const home = input.venue === "home" ? await homeOf(db, userId) : null;
+    const naira = hostingNaira(region, x, z, !!input.onStreet, input.venue, Math.round(n(input.minutes)), Math.round(n(input.capacity)), size.m, home);
     if (naira === null) return say("not_road");
     feeMint = Math.round((naira / perMint) * 100) / 100;
   }

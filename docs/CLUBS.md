@@ -24,21 +24,20 @@ Every club has:
 
 ## At the door
 
-Every club charges to get in (paid once, good for 24 hours, the money burned; never a home's
-party room). Which club charges what is fixed by where it is (`src/lib/fees.ts`):
+Every club is **free to walk into** (`clubEntryMint` is 0). Each club still has a class, fixed by
+where it is (`src/lib/fees.ts`), which names it and sets its bottle prices (they used to be its
+door price):
 
-| Price | Shown as | How many clubs |
+| Class (naira) | Shown as | How many clubs |
 | --- | --- | --- |
 | ₦250,000 | Club | 4 in 10 |
 | ₦500,000 | Premium club | 3 in 10 |
 | ₦1,000,000 | VIP club | 2 in 10 |
 | ₦10,000,000 | Billionaire's row | 1 in 10 |
 
-Famous clubs have their own price instead (a landmark's `door`, src/lib/world/regions): in Lagos,
+Famous clubs have their own class instead (a landmark's `door`, src/lib/world/regions): in Lagos,
 **Quilox** (Ozumba Mbadiwe Avenue) and **Vaniti** (Adeola Odeku Street) on Victoria Island, and
 **Cubana** in Ikeja GRA, all ₦10m (Billionaire's row). Placed from their listings (approx).
-
-Run `game-db/118_club_fees.sql` for the ₦10m doors: until then a door charges at most ₥1,000 (about ₦1.5m).
 
 ## Pole dancing
 
@@ -60,7 +59,7 @@ prices (`src/lib/world/bottles.ts`), from Belaire Rosé (₦250k) and Moët (₦
 and Billionaire's row) charge 1.5×, VIP clubs 1.2×. Up to 6 bottles an order, paid from Fun money
 then savings and burned (`game-db/126_bottle_service.sql`, the server works out the bill).
 
-Sit in a booth first. Then the show (`src/app/play/city/parade.ts`), seen by everyone in the club:
+Order from a booth, or standing anywhere in the club. Then the show (`src/app/play/city/parade.ts`), seen by everyone in the club:
 - a line of hostesses in sparkly dresses walks in from the way in, single file, one per bottle,
   each holding her bottle up high with a sparkler fizzing on top;
 - in front, one carries a light-up LED sign on a pole with your name ("BOTTLE SERVICE · TOLU"),

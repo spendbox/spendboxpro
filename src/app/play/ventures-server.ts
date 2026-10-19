@@ -3,7 +3,7 @@
 // ./moment-actions.ts; not an action itself, so phones can't call it.
 
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { MAX_CATCH_UP_DAYS, VENTURE_KIND_BY_ID, VENTURE_STAGES, goneUnder, newVenture, ventureDays, type Venture, type VentureKindId } from "@/lib/world/ventures";
+import { MAX_CATCH_UP_DAYS, VENTURE_KIND_BY_ID, VENTURE_STAGES, goneUnder, inCrisis, newVenture, ventureDays, type Venture, type VentureKindId } from "@/lib/world/ventures";
 
 const n = (v: unknown) => Number(v) || 0;
 const DAY = 86_400_000;
@@ -24,11 +24,26 @@ export function rowOf(r: Record<string, unknown>): VentureRow {
   };
 }
 
-/** Someone's open business (null: none, or game-db/115 not run yet: then `missing`). */
-export async function openVenture(db: Db, userId: string): Promise<{ row: VentureRow | null; missing: boolean }> {
-  const { data, error } = await db.from("ventures").select("*").eq("user_id", userId).is("closed_at", null).maybeSingle();
-  if (error) return { row: null, missing: true };
-  return { row: data ? rowOf(data) : null, missing: false };
+/** Someone's open businesses, oldest first (none before game-db/115 is run: then `missing`). */
+export async function openVentures(db: Db, userId: string): Promise<{ rows: VentureRow[]; missing: boolean }> {
+  const { data, error } = await db.from("ventures").select("*").eq("user_id", userId).is("closed_at", null).order("started_at").limit(20);
+  if (error) return { rows: [], missing: true };
+  return { rows: (data ?? []).map(rowOf), missing: false };
+}
+
+/** Of someone's businesses, the one whose decision is most pressing: one in crisis, then the longest without one. */
+export function mostDue(rows: VentureRow[]): VentureRow | null {
+  return [...rows].sort((a, b) => Number(inCrisis(b.venture)) - Number(inCrisis(a.venture)) || Date.parse(a.lastMomentAt) - Date.parse(b.lastMomentAt))[0] ?? null;
+}
+
+/**
+ * One of someone's open businesses (null: none, or game-db/115 not run yet: then `missing`): this
+ * one by id, or else the one whose decision is most pressing.
+ */
+export async function openVenture(db: Db, userId: string, id?: number | null): Promise<{ row: VentureRow | null; missing: boolean }> {
+  const { rows, missing } = await openVentures(db, userId);
+  const row = id ? (rows.find((r) => r.id === id) ?? null) : mostDue(rows);
+  return { row, missing };
 }
 
 /**

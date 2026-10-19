@@ -3,7 +3,7 @@
 Advertisers choose, in one wizard over the live map (`src/app/play/life/advertise-panel.tsx`):
 
 1. **Billboard ads on their own** (`src/app/play/life/billboard-wizard.tsx`, `src/lib/ads.ts`): a picture,
-   brand and line on the city's billboards, in one state or all of Nigeria, from ₦5,000 a week for 1 to
+   brand and line on the city's billboards, shown everywhere to everyone online (no state to pick), from ₦5,000 a week for 1 to
    8 weeks. Their ad goes up on the billboards round them while they make it (a note says only they
    see that preview, until it's paid for and live). On the map the picture fills the whole board, as in
    the preview: cropped to the board's 2:1 shape, with the line and brand on a see-through band at the
@@ -17,7 +17,7 @@ the numbers and upgrades at `/advertiser`.
 
 ## Leasing
 
-- In the wizard: pick a state, then search an area, tap a monthly amount and step through buildings
+- In the wizard: search an area, tap a monthly amount and step through buildings
   at that price, or tap a building on the map. Add a logo and billboard picture and see it lit up, then
   the details, how many months, and pay.
 - Landmarks can't be leased.
@@ -83,9 +83,8 @@ views, calls, WhatsApp taps, website visits and directions.
 Every Advertise button (a building's card, an empty billboard, the explainer, `/advertise`, and
 `/advertise/start` or `/business`, which now just open the map) opens a panel over the live 3D map,
 never a new page:
-1. **Where.** The state the ad shows in (every Nigerian state is listed; the ones on the map can be
-   picked, the rest say "soon"). Your building and billboards show to the people living in that
-   state. Then search an area or landmark (the camera flies there and steps through free buildings
+1. **Where.** No state to pick (the picker is hidden): "Your building and billboards show to
+   everyone online." Search an area or landmark (the camera flies there and steps through free buildings
    nearest first), or tap an amount (₦20k to ₦1m, or type one): the map flies to a free building at
    about that yearly price, and ‹ › cycle through the others (`leasableByPrice`). Or tap any building.
    Each one shows as a small 3D block, bigger the dearer it is.

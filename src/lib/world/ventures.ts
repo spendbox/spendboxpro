@@ -5,7 +5,7 @@
 // some you're paid your share, up to a cap for its stage (so businesses can't print money). Business
 // moments, two or three a week, test you (./venture-moments.ts), and what you choose moves the
 // numbers. If its cash runs out there's a crisis; get it wrong and it closes. Failing isn't the end:
-// you keep your home, and you can start again.
+// you keep your home, and you can start again. You can run several at once (up to MAX_VENTURES).
 //
 // Pure rules, shared by the phone (to show it) and the server (which runs the days and pays you,
 // game-db/115). Amounts are in naira; the server turns them into mint.
@@ -136,6 +136,19 @@ export function ventureDay(v: Venture, rand: () => number): { venture: Venture; 
     days: [...v.days, Math.round(profit)].slice(-30),
   };
   return { venture: next, pay: Math.round(pay), profit: Math.round(profit) };
+}
+
+/** How many businesses one person can run at once (game-db/129). */
+export const MAX_VENTURES = 5;
+
+/**
+ * What it makes an hour on an ordinary day as it is now (naira): `pay`, what it pays you (0 when it
+ * makes nothing), and `profit`, what the business itself makes or loses (below 0: losing money).
+ */
+export function ventureHourly(v: Venture) {
+  // An ordinary day: average takings, nothing going wrong.
+  const d = ventureDay(v, () => 0.5);
+  return { pay: Math.round(d.pay / 24), profit: Math.round(d.profit / 24) };
 }
 
 /** Days of business since it was last counted (at most MAX_CATCH_UP_DAYS). */
