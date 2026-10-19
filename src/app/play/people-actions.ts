@@ -79,6 +79,10 @@ export type PlayerCardData = {
   /** The badges they chose to show (docs/LIFE_WHEEL.md; src/lib/world/standing.ts), and their city for local names. */
   lifeBadges: string[];
   region: string;
+  /** A few words about themselves (game-db/130; null until it's run or if they've written none). */
+  about: string | null;
+  /** Who sees their profile photos. */
+  photosFor: "everyone" | "friends";
 };
 
 export type Gender = "male" | "female";
@@ -93,7 +97,7 @@ const engagementOf = (v: unknown) => {
 export async function playerCard(id: string): Promise<PlayerCardData | null> {
   const userId = await currentUserId();
   if (!userId || !/^[0-9a-f-]{36}$/i.test(String(id))) return null;
-  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }, { data: ev }, { data: mo }, badgesRes] = await Promise.all([
+  const [{ data }, { data: liked }, { data: who }, { data: ch }, { data: eng }, { data: ev }, { data: mo }, badgesRes, { data: bio }] = await Promise.all([
     createAdminClient().rpc("player_card", { p_viewer: userId, p_target: id }),
     createAdminClient().rpc("marks_liked", { p_user: id }),
     createAdminClient().from("profiles").select("gender").eq("id", id).maybeSingle(),
@@ -107,6 +111,8 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     createAdminClient().from("lives").select("moment_rep, region").eq("user_id", id).maybeSingle(),
     // Badges they show on their card (game-db/114; none until it's run).
     createAdminClient().from("life_badges").select("badge").eq("user_id", id).eq("shown", true).is("faded_at", null).lte("visible_at", new Date().toISOString()),
+    // About them and who sees their photos (game-db/130; nothing until it's run).
+    createAdminClient().from("profiles").select("about, photos_for").eq("id", id).maybeSingle(),
   ]);
   if (!data) return null;
   const d = data as Record<string, unknown>;
@@ -131,6 +137,8 @@ export async function playerCard(id: string): Promise<PlayerCardData | null> {
     gender: genderOf(who?.gender),
     lifeBadges: badgesRes.error ? [] : (badgesRes.data ?? []).map((b) => String(b.badge)),
     region: String((mo as { region?: string } | null)?.region ?? "lagos"),
+    about: bio?.about ? String(bio.about) : null,
+    photosFor: bio?.photos_for === "friends" ? "friends" : "everyone",
   };
 }
 

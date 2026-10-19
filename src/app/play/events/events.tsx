@@ -100,6 +100,10 @@ export function Events({
   onFly,
   onPerson,
   openId,
+  hostAs = null,
+  onList,
+  goInReq = null,
+  onNeedMap,
 }: {
   region: string;
   me: Me | null;
@@ -126,6 +130,14 @@ export function Events({
   onPerson: (id: string) => void;
   /** An event's beam (or the bubble over it) was tapped on the map: open it. */
   openId?: { id: number; at: number } | null;
+  /** Lite (docs/LITE.md): opened straight on hosting this kind of event. */
+  hostAs?: "party" | "stage" | null;
+  /** Lite: what's on, each time it's looked up (Lite lists it its own way). */
+  onList?: (list: EventView[]) => void;
+  /** Lite: go into this event now (its Go in button). */
+  goInReq?: { id: number; at: number } | null;
+  /** Lite: choosing a spot on the map needs the map (switch to the world). */
+  onNeedMap?: () => void;
 }) {
   const [list, setList] = useState<EventView[]>([]);
   const [off, setOff] = useState(false);
@@ -145,11 +157,14 @@ export function Events({
   /** The party being placed on the map (Choose on the map): its area shows while you move. */
   const [preview, setPreview] = useState<PartyZone | null>(null);
   const whereRef = useRef(where);
-  const cbs = useRef({ onLights, onScenes, onZones });
+  const cbs = useRef({ onLights, onScenes, onZones, onList });
   useEffect(() => {
     whereRef.current = where;
-    cbs.current = { onLights, onScenes, onZones };
+    cbs.current = { onLights, onScenes, onZones, onList };
   });
+  useEffect(() => {
+    cbs.current.onList?.(list);
+  }, [list]);
   const signedIn = !!me;
   const look = useCallback(async () => {
     const at = whereRef.current() ?? { x: 0, z: 0 };
@@ -286,6 +301,19 @@ export function Events({
     void look();
   };
 
+  // Lite's Go in button.
+  const goInRef = useRef(goIn);
+  useEffect(() => {
+    goInRef.current = goIn;
+  });
+  useEffect(() => {
+    if (!goInReq) return;
+    const e = list.find((x) => x.id === goInReq.id);
+    if (e) void goInRef.current(e);
+    // Only when asked (not when the list changes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goInReq]);
+
   // Alerts: a party or a stage that's just started near you (or one you said you're going to).
   const at = where();
   const alerts = list
@@ -313,6 +341,8 @@ export function Events({
           places={places}
           home={home ?? null}
           houseParty={houseParty && !!home}
+          hostAs={hostAs}
+          onNeedMap={onNeedMap}
           describe={describe}
           roads={roads}
           onClose={() => {
@@ -455,6 +485,8 @@ function EventsSheet({
   onPreview,
   onOpen,
   onHosted,
+  hostAs = null,
+  onNeedMap,
 }: {
   region: string;
   list: EventView[];
@@ -472,16 +504,19 @@ function EventsSheet({
   onPreview: (zone: PartyZone | null) => void;
   onOpen: (id: number) => void;
   onHosted: (id: number, startsNow: boolean, view: EventView | null) => void;
+  /** Lite: straight to hosting this kind. */
+  hostAs?: "party" | "stage" | null;
+  onNeedMap?: () => void;
 }) {
   const [intro, setIntro] = useState(() => {
-    if (houseParty) return false;
+    if (houseParty || hostAs) return false;
     try {
       return !localStorage.getItem(INTRO_KEY);
     } catch {
       return true;
     }
   });
-  const [tab, setTab] = useState<Tab>(houseParty ? "host" : "on");
+  const [tab, setTab] = useState<Tab>(houseParty || hostAs ? "host" : "on");
   const [shelf, setShelf] = useState<Shelf>("all");
   // Choose on the map: the card tucks away (all you've filled in kept), a pin in the middle of the
   // screen shows where and how far the party reaches, and Use this spot brings the card back.
@@ -591,7 +626,10 @@ function EventsSheet({
           </span>
         </button>
         {guide && <HostGuide onClose={() => setGuide(false)} />}
-        <HostForm region={region} where={where} places={places} home={home} houseParty={houseParty} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} onPickOnMap={(m) => setPicking(m)} />
+        <HostForm region={region} where={where} places={places} home={home} houseParty={houseParty} describe={describe} roads={roads} onOpen={onOpen} onHosted={onHosted} picked={picked} startAs={hostAs} onPickOnMap={(m) => {
+          onNeedMap?.();
+          setPicking(m);
+        }} />
         </>
       )}
     </Sheet>
@@ -675,11 +713,14 @@ function HostForm({
   onHosted,
   picked,
   onPickOnMap,
+  startAs = null,
 }: {
   region: string;
   where: () => { x: number; z: number } | null;
   places: () => ExplorePlace[];
   home: { x: number; z: number; name: string } | null;
+  /** Start on this kind of event (Lite's Host something). */
+  startAs?: "party" | "stage" | null;
   /** Start as a house party at your home, at its name. */
   houseParty?: boolean;
   describe: (x: number, z: number) => SpotWords;
@@ -695,8 +736,8 @@ function HostForm({
   useEffect(() => {
     void eventQuote(region).then(setQuote).catch(() => setQuote(null));
   }, [region]);
-  const [cat, setCat] = useState<EventCategoryId>("party");
-  const [formatId, setFormatId] = useState(houseParty ? "house_party" : "street_party");
+  const [cat, setCat] = useState<EventCategoryId>(startAs ?? "party");
+  const [formatId, setFormatId] = useState(houseParty ? "house_party" : startAs === "stage" ? "talk" : "street_party");
   const f = eventFormat(formatId) as EventFormat;
   const [title, setTitle] = useState(houseParty ? "House party" : "");
   const [about, setAbout] = useState("");

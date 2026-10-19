@@ -453,6 +453,7 @@ export function MoneyHome({
   onToppedUp,
   onProperty,
   packsOpen,
+  inline,
 }: {
   coins: number;
   perMint: number;
@@ -467,6 +468,8 @@ export function MoneyHome({
   onProperty: () => void;
   /** Opened to buy a starter pack: show the packs unfolded. */
   packsOpen?: boolean;
+  /** Lite's Wallet tab (docs/LITE.md): drawn on the page, under Lite's own balance, not as a pop-up. */
+  inline?: boolean;
 }) {
   const [view, setView] = useState<MoneyView | null | undefined>(undefined);
   useEffect(() => {
@@ -496,12 +499,16 @@ export function MoneyHome({
     // Once, when the Wallet opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return (
-    <Sheet onClose={onClose} title="Wallet" above>
-      <div className="flex items-end justify-between rounded-2xl bg-ink px-4 py-3 text-white">
-        <p className="font-display text-3xl font-extrabold tabular-nums">{cash(coins, { exact: true, full: true })}</p>
-        {today > 0 && <p className="text-xs font-semibold text-[#8ce99a]">+{cash(today / perMint)} today</p>}
-      </div>
+  const body = (
+    <>
+      {inline ? (
+        today > 0 && <p className="mb-2 text-center text-sm font-semibold text-me">+{cash(today / perMint)} today</p>
+      ) : (
+        <div className="flex items-end justify-between rounded-2xl bg-ink px-4 py-3 text-white">
+          <p className="font-display text-3xl font-extrabold tabular-nums">{cash(coins, { exact: true, full: true })}</p>
+          {today > 0 && <p className="text-xs font-semibold text-[#8ce99a]">+{cash(today / perMint)} today</p>}
+        </div>
+      )}
       <button
         onClick={() => {
           onClose();
@@ -545,7 +552,7 @@ export function MoneyHome({
           }}
         />
       </div>
-      <div className="mt-3">
+      <div className="mt-3" id="nt-topups">
         <TopUps
           region={region}
           perMint={perMint}
@@ -557,6 +564,12 @@ export function MoneyHome({
       </div>
       <Payments list={payments} onCheck={() => void checkPayments()} checking={checking} />
       <WorldBank />
+    </>
+  );
+  if (inline) return body;
+  return (
+    <Sheet onClose={onClose} title="Wallet" above>
+      {body}
     </Sheet>
   );
 }

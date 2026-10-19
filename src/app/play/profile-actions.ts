@@ -177,3 +177,16 @@ export async function upgradeLevel(): Promise<Result<{ level: number; cost: numb
   if (error) return { ok: false, error: mintify(error.message, true) };
   return { ok: true, level: Number(data.level), cost: Number(data.cost) };
 }
+
+/** "About you" (up to 160 letters) and who sees your profile photos (game-db/130). */
+export async function saveAbout(about: string, photosFor: "everyone" | "friends"): Promise<Result> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, error: "Please sign in again." };
+  const text = String(about ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const { error } = await createAdminClient()
+    .from("profiles")
+    .update({ about: text || null, photos_for: photosFor === "friends" ? "friends" : "everyone" })
+    .eq("id", userId);
+  if (error) return { ok: false, error: /about|photos_for/.test(error.message) ? "Saving this is switched on soon." : "That didn't save. Try again." };
+  return { ok: true };
+}

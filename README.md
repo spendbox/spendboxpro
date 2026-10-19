@@ -8,6 +8,9 @@ The home page is the live city: anyone can watch a game without signing in, and 
 play. One shared world, played in hourly games: ghosts stake mint and light up on the map;
 hunters (everyone else) challenge them to quick duels (`game-db/029_ghost_duels.sql`).
 
+**Lite mode** (docs/LITE.md) is the same game without the 3D city: chats, events, people and the
+wallet on a phone-friendly screen, with the world one tap away.
+
 ## How a game works
 
 The game is 18+ (players give their date of birth when they sign up). The UI says "ghosts" and

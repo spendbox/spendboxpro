@@ -138,6 +138,12 @@ import type { ChatLocation } from "@/lib/chat-location";
 import { RecentRail, rememberPerson } from "./people/recent-rail";
 import { PrankReveal, usePrankReveal } from "./people/prank-reveal";
 import { openAdvertise } from "./life/advertise-open";
+import { LiteButton, LiteOffer, LiteShell } from "./lite/lite-shell";
+import { LiteEvents } from "./lite/lite-events";
+import { LiteProfile } from "./lite/lite-profile";
+import { liteOffered, liteServer, liteSnapshot, markLiteOffered, setLite as switchLite, subscribeLite, type LiteTab } from "./lite/lite-pref";
+import type { EventView } from "./events/event-actions";
+import { cardPreview } from "./people/card-cache";
 import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
@@ -613,6 +619,34 @@ export function Game({
   // The real place everyone lives in (Lagos): the hourly towns and their countdown are off.
   const worldId = useSyncExternalStore(noSubscribe, worldPreview, noWorld);
   const worldRegion = worldId ? REGIONS[worldId] : null;
+  // Lite (docs/LITE.md): the game round chat, events, people and the wallet, without the 3D city
+  // (it isn't drawn at all). Null until this phone says which, so a Lite player's phone never starts
+  // loading the city.
+  const liteStored = useSyncExternalStore(subscribeLite, liteSnapshot, liteServer);
+  const lite = liteStored === true && !!worldId && !state.me.guest;
+  const cityAllowed = liteStored === false || !worldId || state.me.guest;
+  const [liteTab, setLiteTab] = useState<LiteTab>("chats");
+  const [liteFrame, setLiteFrame] = useState({ top: 80, bottom: 80 });
+  const [liteNewChat, setLiteNewChat] = useState(0);
+  const [liteProfile, setLiteProfile] = useState(false);
+  const [liteSend, setLiteSend] = useState(false);
+  const [liteOffer, setLiteOffer] = useState(false);
+  /** What's on (from Events, for Lite's own list), going into one, and hosting one kind. */
+  const [eventList, setEventList] = useState<EventView[]>([]);
+  const [eventGoIn, setEventGoIn] = useState<{ id: number; at: number } | null>(null);
+  const [eventsHostAs, setEventsHostAs] = useState<"party" | "stage" | null>(null);
+  /** Something that needs the map (going home, leaving a mark): back to the world first. */
+  const leaveLite = () => {
+    if (!lite) return;
+    setLiteProfile(false);
+    switchLite(false);
+  };
+  // In the world, once: a note offering Lite.
+  useEffect(() => {
+    if (!worldId || state.me.guest || liteStored !== false || liteOffered()) return;
+    const t = setTimeout(() => setLiteOffer(true), 25_000);
+    return () => clearTimeout(t);
+  }, [worldId, state.me.guest, liteStored]);
   // The 3D city broke and couldn't mend itself (a blank grey map): build it again, a few times at most.
   const [cityLife, setCityLife] = useState(0);
   const rebuildCity = useCallback(() => setCityLife((n) => (n < 3 ? n + 1 : n)), []);
@@ -676,6 +710,11 @@ export function Game({
       entering.current = Date.now();
       setOpenReq((r) => ({ id: `b:${spiralIndex(sp.x, sp.z)}`, at: (r?.at ?? 0) + 1 }));
     },
+  });
+  /** Where you are without the map (Lite): the place you last went, or your home. */
+  const spotRef = useRef<{ x: number; z: number } | null>(null);
+  useEffect(() => {
+    spotRef.current = worldLife.mySpot ?? worldLife.homeSpot ?? null;
   });
   // The phone: the camera (a picture of the town, or a selfie) and the phone itself (gallery).
   const [camera, setCamera] = useState<"photo" | "selfie" | null>(null);
@@ -911,7 +950,7 @@ export function Game({
     if (!worldId || me.guest) return;
     let alive = true;
     const look = () => {
-      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      const c = worldLife.centerRef.current?.() ?? spotRef.current ?? { x: 0, z: 0 };
       void peopleAround<PersonOnMap>(worldId, c.x, c.z)
         .then((r) => {
           if (!alive || !r) return;
@@ -937,7 +976,7 @@ export function Game({
     if (!worldId) return;
     let alive = true;
     const look = () => {
-      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      const c = worldLife.centerRef.current?.() ?? spotRef.current ?? { x: 0, z: 0 };
       void roomCountsAround(worldId, c.x, c.z).then((counts) => alive && counts && setServerCounts(counts));
     };
     const first = setTimeout(look, 1200);
@@ -1015,7 +1054,7 @@ export function Game({
         region={worldId}
         compact={where === "chat"}
         onlineOnly={where === "stats"}
-        centre={() => worldLife.centerRef.current?.() ?? { x: 0, z: 0 }}
+        centre={() => worldLife.centerRef.current?.() ?? spotRef.current ?? { x: 0, z: 0 }}
         onMessage={(p) => {
           setStatsOpen(false);
           chatWith(p);
@@ -1074,7 +1113,7 @@ export function Game({
   useEffect(() => {
     if (!worldId || me.guest) return;
     const t = setTimeout(() => {
-      const c = worldLife.centerRef.current?.() ?? { x: 0, z: 0 };
+      const c = worldLife.centerRef.current?.() ?? spotRef.current ?? { x: 0, z: 0 };
       prefetchPeople(worldId, c.x, c.z);
     }, 4000);
     return () => clearTimeout(t);
@@ -1124,6 +1163,10 @@ export function Game({
     rememberPerson(p, "Messaged");
     setDmRequest({ id: p.id, name: p.name, at: Date.now() });
     setChatOpen(true);
+    if (lite) {
+      setLiteProfile(false);
+      setLiteTab("chats");
+    }
   }
   // A friend goes somewhere new in town: offer to join them.
   const friendRooms = useRef<Map<string, string> | null>(null);
@@ -1406,6 +1449,17 @@ export function Game({
       setOpenAd((cur) => (cur && cur.ad.id === o.ad.id ? { ...cur, reward: 0, note } : cur));
     } catch {}
   }
+
+  // Lite has no billboards: one ad at a time sits under the Chats title instead (changing every two
+  // minutes), counted as a view each time it shows, and opening the same card as tapping a billboard.
+  const liteAd = lite && allAds.length ? allAds[Math.floor(now / 120_000) % allAds.length] : null;
+  const liteAdId = liteTab === "chats" && !liteProfile ? (liteAd?.id ?? null) : null;
+  const businessViews = worldLife.businessViews;
+  useEffect(() => {
+    if (!liteAdId) return;
+    if (liteAdId.startsWith("bz:")) businessViews({ [liteAdId]: 1 });
+    else onAdViews({ [liteAdId]: 1 });
+  }, [liteAdId, businessViews, onAdViews]);
 
   // On a computer, tell people they can hold Ctrl and drag to turn the city (once).
   useEffect(() => {
@@ -2469,7 +2523,7 @@ export function Game({
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-bg">
-      {(round || worldId) && (
+      {(round || worldId) && cityAllowed && (
         <Safe name="City view" fallback={<div className="absolute inset-0 grid place-items-center text-muted">Rebuilding the city…</div>}>
           <CityView
             key={cityLife}
@@ -2859,7 +2913,7 @@ export function Game({
           onClose={() => setFightOpen(false)}
           playOpen={playOpen}
           onPlayClose={() => setPlayOpen(false)}
-          where={() => worldLife.centerRef.current?.() ?? null}
+          where={() => worldLife.centerRef.current?.() ?? (lite ? (worldLife.mySpot ?? worldLife.homeSpot ?? null) : null)}
           onLights={setChallengeLights}
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
@@ -2873,8 +2927,9 @@ export function Game({
           onClose={() => {
             setEventsOpen(false);
             setHouseParty(false);
+            setEventsHostAs(null);
           }}
-          where={() => worldLife.centerRef.current?.() ?? null}
+          where={() => worldLife.centerRef.current?.() ?? (lite ? (worldLife.mySpot ?? worldLife.homeSpot ?? null) : null)}
           places={worldLife.explore}
           home={homeForParty}
           houseParty={houseParty}
@@ -2887,6 +2942,10 @@ export function Game({
           onMessage={(text, good) => setMessage({ text, tone: good ? "good" : "bad" })}
           onFly={(x, z) => worldLife.lookAt(x, z)}
           onPerson={(id) => setPersonId(id)}
+          hostAs={eventsHostAs}
+          onList={setEventList}
+          goInReq={eventGoIn}
+          onNeedMap={() => lite && switchLite(false)}
         />
       )}
       {clubDoor && (
@@ -4262,7 +4321,7 @@ export function Game({
                 { label: "My card", icon: User, colour: "#7048e8", go: () => setPersonId(me.id) },
                 { label: "My life", icon: Orbit, colour: "#e8590c", go: () => setWheelOpen(true) },
                 { label: "My business", icon: Briefcase, colour: "#7048e8", go: () => setCareerOpen(true) },
-                ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => worldLife.goHome() }] : []),
+                ...(worldLife.hasHome ? [{ label: "Home", icon: House, colour: "#7048e8", go: () => { leaveLite(); worldLife.goHome(); } }] : []),
                 { label: "Wallet", icon: Wallet, colour: "#2b8a3e", go: () => setMoneyOpen(true) },
                 { label: "Photos", icon: ImageIcon, colour: "#f59f00", go: () => setPhone("photos") },
                 { label: "My things", icon: Gem, colour: "#0c8599", go: () => worldLife.openThings("mine") },
@@ -4284,7 +4343,7 @@ export function Game({
               items: [
                 { label: "Shop", icon: ShoppingBag, colour: "#5f3dc4", go: () => worldLife.openThings("shops") },
                 { label: "Assets", icon: TrendingUp, colour: "#2b8a3e", go: () => worldLife.openThings("assets") },
-                { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => worldLife.openLeaveMark() },
+                { label: "Leave a mark", icon: PenLine, colour: "#1098ad", go: () => { leaveLite(); worldLife.openLeaveMark(); } },
                 // Write a moment (docs/LIFE_WHEEL.md, phase 7) is built (./moments/write-sheet.tsx) but not open yet.
                 { label: "Write a moment", icon: PenLine, colour: "#adb5bd", go: () => setMessage({ text: "Writing your own moments is coming soon.", tone: "info", icon: PenLine }) },
                 ...(worldLife.hasHome ? [{ label: "Coming soon", icon: Rocket, colour: "#7048e8", go: worldLife.openSoon }] : []),
@@ -4316,7 +4375,13 @@ export function Game({
               <p className="text-sm font-semibold leading-snug">{locPop.name} sent you their location</p>
               <p className="truncate text-xs text-white/70">{locPop.loc.label}</p>
               <div className="mt-2 flex gap-2">
-                <button onClick={() => void goToLocation(locPop.loc)} className="h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink">
+                <button
+                  onClick={() => {
+                    if (lite) switchLite(false);
+                    void goToLocation(locPop.loc);
+                  }}
+                  className="h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink"
+                >
                   Go there
                 </button>
                 {locPop.id && (
@@ -4349,8 +4414,11 @@ export function Game({
             roundId={0}
             keep
             players={state.players}
-            open={chatOpen}
+            open={lite ? liteTab === "chats" : chatOpen}
             onOpenChange={setChatOpen}
+            lite={lite ? { ...liteFrame, newChat: liteNewChat } : undefined}
+            onGiveCoins={lite ? (p) => setGiveTo(p) : undefined}
+            onPlay={lite ? (p) => window.dispatchEvent(new CustomEvent("nt-play-game", { detail: { game: "whot", id: p.id, name: p.name, avatar: p.avatar } })) : undefined}
             room={rooms.myRoomInfo}
             roomMembers={rooms.members}
             roomCount={rooms.myRoom ? (rooms.counts[rooms.myRoom] ?? 0) : 0}
@@ -4378,7 +4446,10 @@ export function Game({
             }}
             news={{ latest: null, onOpen: () => worldLife.openNews() }}
             onlineNow={onlineFaces}
-            onGoTo={(loc) => void goToLocation(loc)}
+            onGoTo={(loc) => {
+              if (lite) switchLite(false);
+              void goToLocation(loc);
+            }}
             onLocation={(p) => {
               playSfx("chime");
               setLocPop({ ...p, at: Date.now() });
@@ -4403,6 +4474,10 @@ export function Game({
           onClose={() => setPersonId(null)}
           onFly={(x, z) => {
             setPersonId(null);
+            if (lite) {
+              setLiteProfile(false);
+              switchLite(false);
+            }
             leaveThen.current("go to them", () => worldLife.fly(x, z));
           }}
           onAddFriend={me.guest ? undefined : (p) => void befriend(p)}
@@ -4494,8 +4569,138 @@ export function Game({
           <Joystick stick={walkStick} />
         </div>
       )}
+      {/* Lite (docs/LITE.md): over where the city would be. */}
+      {lite && worldId && (
+        <LiteShell
+          tab={liteTab}
+          onTab={setLiteTab}
+          me={{ name: me.name ?? "You", avatar: me.avatar }}
+          onProfile={() => setLiteProfile(true)}
+          onWorld={() => switchLite(false)}
+          onNewChat={() => setLiteNewChat((n) => n + 1)}
+          unread={unread + chatUnread}
+          eventsLive={eventLights.some((l) => l.playing)}
+          onFrame={(top, bottom) => setLiteFrame((f) => (f.top === top && f.bottom === bottom ? f : { top, bottom }))}
+          message={message ? { text: cashText(message.text), tone: message.tone } : null}
+          above={
+            liteTab === "chats" && liteAd ? (
+              <button
+                onClick={() => void onBillboardTap({ id: liteAd.id, tile: 0, adId: liteAd.id })}
+                className="mx-5 mb-3 flex w-[calc(100%-2.5rem)] items-center gap-3 rounded-2xl px-3 py-2.5 text-left ring-1 ring-line"
+                aria-label={`Sponsored: ${liteAd.brand}. ${liteAd.headline}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={liteAd.image} alt="" className="size-12 shrink-0 rounded-xl bg-panel-2 object-cover" />
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate text-[15px]">{liteAd.brand}</b>
+                  <span className="block truncate text-sm text-muted">{liteAd.headline}</span>
+                </span>
+                <span className="shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold text-muted ring-1 ring-line">Ad</span>
+              </button>
+            ) : undefined
+          }
+        >
+          {liteTab === "events" && (
+            <LiteEvents
+              list={eventList}
+              gamesOn={challengeLights.length}
+              now={now}
+              where={() => worldLife.mySpot ?? worldLife.homeSpot ?? null}
+              onOpen={(id) => setEventTapped({ id, at: Date.now() })}
+              onGoIn={(id) => setEventGoIn({ id, at: Date.now() })}
+              onHost={(kind) => {
+                if (kind === "game") return setPlayOpen(true);
+                setEventsHostAs(kind);
+                setEventsOpen(true);
+              }}
+              onGames={() => setPlayOpen(true)}
+            />
+          )}
+          {liteTab === "people" && (
+            <PeopleList roomy region={worldId} centre={() => worldLife.mySpot ?? worldLife.homeSpot ?? { x: 0, z: 0 }} onMessage={chatWith} onPerson={setPersonId} />
+          )}
+          {liteTab === "wallet" && (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6">
+              <div className="pt-2 text-center">
+                <p className="text-sm font-bold text-muted">You have</p>
+                <p className="text-[42px] font-extrabold leading-tight tracking-tight">
+                  <LiveCash coins={me.coins} />
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 py-5">
+                <button onClick={() => document.getElementById("nt-topups")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="h-14 rounded-[18px] bg-ink text-base font-extrabold text-white">
+                  Top up
+                </button>
+                <button onClick={() => setLiteSend(true)} className="h-14 rounded-[18px] bg-panel-2 text-base font-extrabold">
+                  Send
+                </button>
+              </div>
+              <LiveMoneyHome
+                inline
+                coins={me.coins}
+                perMint={worldRegion?.prices.perMint ?? 1_500}
+                region={worldId}
+                onClose={() => {}}
+                onTaken={() => {
+                  playSfx("chime");
+                  startTransition(() => router.refresh());
+                }}
+                onToppedUp={(mint, doubled, pack) => {
+                  playSfx("chime");
+                  setMessage({ text: pack ? `Your starter pack is in: +${cash(mint)}` : `Your top-up is in: +${cash(mint)}${doubled ? " (your first one, doubled!)" : ""}`, tone: "good" });
+                  startTransition(() => router.refresh());
+                }}
+                onProperty={() => worldLife.openThings("assets")}
+              />
+            </div>
+          )}
+        </LiteShell>
+      )}
+      {lite && liteProfile && (
+        <LiteProfile
+          me={{ id: me.id, name: me.name ?? "You", avatar: me.avatar, level: me.level }}
+          onClose={() => setLiteProfile(false)}
+          onMenu={() => setMeOpen(true)}
+          onPhoto={() => setPhotoOpen(true)}
+          onLook={() => setEditAvatar(true)}
+          onMessage={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
+      )}
+      {liteSend && worldId && (
+        <Sheet onClose={() => setLiteSend(false)} title="Send money to…">
+          <div className="flex h-[60dvh] flex-col">
+            <PeopleList
+              region={worldId}
+              compact
+              action="Send"
+              centre={() => worldLife.mySpot ?? worldLife.homeSpot ?? { x: 0, z: 0 }}
+              onMessage={(p) => {
+                setLiteSend(false);
+                setGiveTo({ id: p.id, name: p.name, avatar: cardPreview(p.id)?.avatar ?? null });
+              }}
+              onPerson={setPersonId}
+            />
+          </div>
+        </Sheet>
+      )}
+      {/* The world's way to Lite: a pill above the Town Hall, and once, a note offering it. */}
+      {worldId && !guest && !lite && !camera && !place && ride === null && (
+        <LiteButton onClick={() => switchLite(true)} className="absolute bottom-[9.5rem] right-3 z-20 sm:bottom-[11rem] sm:right-4" />
+      )}
+      {liteOffer && !lite && worldId && !guest && (
+        <LiteOffer
+          onTry={() => {
+            setLiteOffer(false);
+            switchLite(true);
+          }}
+          onNo={() => {
+            setLiteOffer(false);
+            markLiteOffered();
+          }}
+        />
+      )}
       {/* The walkthrough: everyone, once they have a home (in front of everything, chat included). */}
-      {worldId && !guest && worldLife.hasHome && !camera && worldRegion && (
+      {worldId && !guest && !lite && worldLife.hasHome && !camera && worldRegion && (
         <Tutorial
           place={worldRegion.name}
           perMint={worldRegion.prices.perMint}
