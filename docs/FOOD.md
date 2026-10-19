@@ -3,13 +3,13 @@
 Restaurants, bars, lounges, hotel restaurants and clubs all have a menu.
 
 ## How it works
-1. Go inside and **sit at a table** (tap a glowing chair). The menu won't take an order until you're sitting.
+1. Go inside. Order standing, or **sit at a table** first (tap a glowing chair) to have it set down in front of you.
 2. Tap **Order food & drinks** (in a hotel suite it's **Room service**). There are two tabs, Food and Drinks.
 3. Add up to **6 things**. The button shows the bill: `Order 4 for ₦…`.
 4. You pay from your money (fun first, then savings, then essentials). If you can't afford it, you're told.
 5. A **waiter** in a white shirt walks over from the door with a tray, stops beside you, sets the dishes
    down on your table (food in front, drinks behind) and walks back. The food stays until you leave or
-   order again.
+   order again. Standing, he walks up to you and hands it over instead.
 6. The room sees what you ordered. (No mind or body meters: those are switched off.)
 
 ## The menu (at an ordinary restaurant)

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MOMENTS, pickMoment, ventureFits } from "../moments.ts";
 import { lifeFacts, LIFE_BADGES } from "../standing.ts";
-import { VENTURE_KINDS, VENTURE_STAGES, applyChange, capacity, goneUnder, inCrisis, newVenture, readyToGrow, ventureDay, ventureDays, type Venture } from "../ventures.ts";
+import { EARNINGS_BOOST, VENTURE_KINDS, VENTURE_STAGES, applyChange, capacity, goneUnder, inCrisis, newVenture, readyToGrow, ventureDay, ventureDays, ventureHourly, type Venture } from "../ventures.ts";
 
 // A steady little random, so runs are the same every time.
 function rng(seed = 7) {
@@ -29,7 +29,7 @@ test("a well-run business grows, is ready for the next stage within a couple of 
       // Hire when the queue is out of the door.
       if (v.customers > capacity(v)) v = { ...v, staff: v.staff + 1 };
       const d = ventureDay(v, rand);
-      assert.ok(d.pay <= VENTURE_STAGES[v.stage].cap, `${k.id}: paid over the cap`);
+      assert.ok(d.pay <= VENTURE_STAGES[v.stage].cap * EARNINGS_BOOST, `${k.id}: paid over the cap`);
       assert.ok(d.pay >= 0);
       v = d.venture;
       if (readyToGrow(v)) ready = day;
@@ -97,4 +97,16 @@ test("career badges and Legacy", () => {
   for (const id of ["founder", "first_profit", "the_boss", "brand_name", "mogul", "comeback_kid"]) assert.ok(got.has(id), id);
   assert.ok(facts.legacy >= 40 + 60);
   assert.ok(!LIFE_BADGES.filter((b) => b.earned(lifeFacts([], [], now))).some((b) => b.kind === "career"));
+});
+
+test("what a business makes an hour is an ordinary day's, a 24th of it", () => {
+  const v = { ...newVenture("buka", "Mama Put"), customers: 18, quality: 70 };
+  const h = ventureHourly(v);
+  const day = ventureDay(v, () => 0.5);
+  assert.equal(h.pay, Math.round(day.pay / 24));
+  assert.equal(h.profit, Math.round(day.profit / 24));
+  // A brand-new one with no customers yet loses its upkeep, and pays you nothing.
+  const fresh = ventureHourly({ ...newVenture("import", "Apapa Links"), customers: 0 });
+  assert.ok(fresh.profit < 0);
+  assert.equal(fresh.pay, 0);
 });

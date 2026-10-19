@@ -6,7 +6,7 @@ import { seasonsAt } from "@/lib/world/calendar";
 import { CAST_BY_ID } from "@/lib/world/cast";
 import { BUSINESS_EVERY_H, CRISIS_EVERY_H, applyChange, inCrisis, readyToGrow } from "@/lib/world/ventures";
 import { STORY_OPENS, bondWith, dueLink, findPartner, giveInStory, openLink, sendLink, storyOpenOf, type StoryOpen } from "./stories-server";
-import { openVenture, settleVenture, stageScale, type VentureRow } from "./ventures-server";
+import { mostDue, openVenture, openVentures, settleVenture, stageScale, type VentureRow } from "./ventures-server";
 import { writtenMoments } from "./written-server";
 import { BADGE_DELAY_HOURS, LIFE_BADGES, LIFE_BADGE_BY_ID, fameWord, lifeFacts, type LivedMoment } from "@/lib/world/standing";
 import { regionMap } from "@/lib/world";
@@ -118,17 +118,20 @@ async function fitsOf(db: ReturnType<typeof createAdminClient>, userId: string, 
 
 /** How long between business moments (two or three a week), and in a crisis. */
 
-/** Someone's business, its days counted, as moment picking needs it (undefined before game-db/115). */
+/**
+ * Someone's businesses, their days counted, as moment picking needs it (undefined before
+ * game-db/115): the one whose decision is most pressing (a business moment is about that one).
+ */
 async function businessOf(db: ReturnType<typeof createAdminClient>, userId: string, perMint: number): Promise<{ row: VentureRow | null; state: VentureState | undefined }> {
-  const found = await openVenture(db, userId);
+  const found = await openVentures(db, userId);
   if (found.missing) return { row: null, state: undefined };
-  if (!found.row) return { row: null, state: { open: false, stage: 0, crisis: false, grow: false, due: false } };
-  const s = await settleVenture(db, userId, perMint, found.row);
-  if (!s.row) return { row: null, state: { open: false, stage: 0, crisis: false, grow: false, due: false } };
-  const v = s.row.venture;
+  const settled = await Promise.all(found.rows.map((r) => settleVenture(db, userId, perMint, r)));
+  const row = mostDue(settled.flatMap((s) => (s.row ? [s.row] : [])));
+  if (!row) return { row: null, state: { open: false, stage: 0, crisis: false, grow: false, due: false } };
+  const v = row.venture;
   const crisis = inCrisis(v);
-  const since = (Date.now() - Date.parse(s.row.lastMomentAt)) / 3_600_000;
-  return { row: s.row, state: { open: true, stage: v.stage, crisis, grow: readyToGrow(v), due: since >= (crisis ? CRISIS_EVERY_H : BUSINESS_EVERY_H) } };
+  const since = (Date.now() - Date.parse(row.lastMomentAt)) / 3_600_000;
+  return { row, state: { open: true, stage: v.stage, crisis, grow: readyToGrow(v), due: since >= (crisis ? CRISIS_EVERY_H : BUSINESS_EVERY_H) } };
 }
 
 /** How often at most standing and badges are worked out again for someone (ms), unless asked. */
@@ -309,7 +312,9 @@ export async function momentNext(input: { spot: MomentSpot; place?: string; area
     const mine = items.find((i) => def.item!.includes(i.kind)) ?? items.find((i) => def.item!.includes(`cat:${i.category}`));
     if (mine) vars.parts = { ...(vars.parts ?? {}), item: mine.name };
   }
-  const full = { ...vars, seed, ...(other ? { partner: other } : {}), ...(has.length ? { has } : {}) };
+  // A business moment is about one of your businesses: which one, for when you answer.
+  const venture = def.venture && !def.venture.none && business.row ? business.row.id : null;
+  const full = { ...vars, seed, ...(other ? { partner: other } : {}), ...(has.length ? { has } : {}), ...(venture ? { venture } : {}) };
   const { data: id, error } = await m.db.rpc("moment_open", {
     p_user: m.userId,
     p_moment: def.id,
@@ -355,7 +360,7 @@ export async function momentAnswer(id: number, choice: number): Promise<MomentRe
   const [answers, effects, biz] = await Promise.all([
     answersOf(m.db, m.userId),
     effectsOf(m.db, m.userId),
-    def.venture && !def.venture.none ? openVenture(m.db, m.userId).catch(() => ({ row: null, missing: true })) : Promise.resolve({ row: null, missing: false }),
+    def.venture && !def.venture.none ? openVenture(m.db, m.userId, n((vars as { venture?: unknown }).venture) || null).catch(() => ({ row: null, missing: true })) : Promise.resolve({ row: null, missing: false }),
   ]);
   const outcome = rollOutcome(c, Math.random, {
     character: characterOf(answers),

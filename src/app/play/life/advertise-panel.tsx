@@ -19,7 +19,7 @@ import { BILLBOARD_STEPS, BillboardWizard } from "./billboard-wizard";
 // Advertising, right on the map (docs/BUSINESS.md, docs/ADS.md). First a choice:
 //   - Billboard ads: your picture on the city's billboards, a weekly budget for 1 to 8 weeks
 //     (./billboard-wizard.tsx). It goes up on the billboards round you as you make it.
-//   - A building of your own, by the month: choose the state, find a building (search an area, tap
+//   - A building of your own, by the month: find a building (search an area, tap
 //     a monthly amount and step through buildings at that price, or tap one on the map), add your
 //     pictures and see it lit up on the real 3D city, then your details, how many months, and pay.
 //     It comes with your design on the billboards too.
@@ -30,12 +30,6 @@ export { openAdvertise } from "./advertise-open";
 /** What the map shows while you choose: your name lit up on the building, your design on the billboards. */
 export type AdPreview = { building: string; name: string; line: string; logo: string | null; billboard: string | null };
 
-/** Every state in Nigeria: ads show in the state you choose, to the people living there. */
-const STATES = [
-  "Lagos", "FCT Abuja", "Rivers", "Oyo", "Kano", "Ogun", "Enugu", "Delta", "Edo", "Kaduna", "Anambra", "Akwa Ibom", "Cross River", "Imo", "Abia", "Kwara",
-  "Osun", "Ondo", "Ekiti", "Plateau", "Bauchi", "Benue", "Borno", "Ebonyi", "Gombe", "Jigawa", "Katsina", "Kebbi", "Kogi", "Nasarawa", "Niger", "Sokoto",
-  "Taraba", "Yobe", "Zamfara", "Adamawa", "Bayelsa",
-];
 const stateRegion = (name: string) => Object.keys(REGIONS).find((id) => REGIONS[id].name.toLowerCase() === name.toLowerCase()) ?? null;
 
 /** Amounts to tap: the map takes you to a free building at that price a month. */
@@ -111,7 +105,7 @@ export function AdvertisePanel({
     modeRef.current = mode;
   }, [mode]);
   const [small, setSmall] = useState(false);
-  const [state, setState] = useState(region.region.name);
+  const state = region.region.name;
   const [q, setQ] = useState("");
   const [list, setList] = useState<LeaseOffer[] | null>(null);
   const [listNote, setListNote] = useState("");
@@ -300,7 +294,7 @@ export function AdvertisePanel({
 
             {mode === "choose" && (
               <div className="space-y-2.5">
-                <p className="text-sm text-muted">Everyone playing in {region.region.name} sees it. What would you like?</p>
+                <p className="text-sm text-muted">Everyone online sees it. What would you like?</p>
                 <button
                   onClick={() => {
                     setMode("billboard");
@@ -340,35 +334,11 @@ export function AdvertisePanel({
               </div>
             )}
 
-            {mode === "billboard" && <BillboardWizard step={step} go={go} regionId={regionId} onPreview={onPreview} />}
+            {mode === "billboard" && <BillboardWizard step={step} go={go} onPreview={onPreview} />}
 
             {mode === "building" && step === 0 && (
               <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-semibold text-muted">Which state should your ad show in?</p>
-                  <div className="-mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
-                    {STATES.map((s) => {
-                      const open = !!stateRegion(s);
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => setState(s)}
-                          className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold ${state === s ? "bg-ink text-white" : open ? "bg-ink/[0.06]" : "bg-ink/[0.03] text-muted"}`}
-                        >
-                          {s}
-                          {!open && <span className="ml-1 text-[10px] font-normal opacity-70">soon</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted">
-                    {live
-                      ? `Your building and billboards show to everyone living their life in ${state}.`
-                      : `${state} isn't on the map yet. Ads there open when it is; for now you can advertise in ${Object.values(REGIONS)
-                          .map((r) => r.name)
-                          .join(", ")}.`}
-                  </p>
-                </div>
+                <p className="text-[11px] text-muted">Your building and billboards show to everyone online.</p>
 
                 {live === regionId && (
                   <>

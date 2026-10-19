@@ -1,6 +1,7 @@
 # To do
 
 ## Now (owner)
+- [ ] **Run `game-db/129_many_businesses.sql` once in the Supabase SQL Editor** (live, then test): players can run up to 5 businesses at once. Until it's run, starting a second one says "Running more than one is switched on soon"; everything else works.
 - [ ] **Run `game-db/setup/run-111-to-128.sql` once in the Supabase SQL Editor** (on the live database, then the test one): every update from 111 to 128 in one paste. Each is safe to run again, so it doesn't matter which you ran before. It includes the urgent security fix (128: anyone with the app's public key could make any player host an event and charge them any fee), the money-cheat fixes (124), the cost savings (125, 127), bottle service (126) and the Police & Thieves lobby fix (123). Checked on a test copy: from part 110, from part 123, and on top of everything, twice over.
 - [ ] **Launch Ready: 1,000 Players**: the fixes before opening to 1,000 players (money cheats, stuck games, cost, phone speed), in docs/LAUNCH_FIXES.md.
 - [x] Set up the test version with its own database (docs/TESTING.md, about 20 minutes). Until then, previews use the live database.

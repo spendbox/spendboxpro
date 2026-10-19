@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BellRing, BookOpen, DoorClosed, PartyPopper } from "lucide-react";
+import { BellRing, BookOpen, DoorClosed } from "lucide-react";
 import { Sheet } from "../sheet";
 import { answerKnock, knock, knockStatus, myDoor, myGuestBook, signGuestBook, type GuestLine, type Knock } from "./visit-actions";
 import { whileHere } from "../activity";
@@ -146,7 +146,7 @@ export function DoorBell({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-/** On your home card: parties (coming soon), and your guest book. */
+/** On your home card: your guest book (parties are hosted with "Host a house party", above it). */
 export function HomeParty() {
   const [book, setBook] = useState<GuestLine[] | null>(null);
   const [showBook, setShowBook] = useState(false);
@@ -155,15 +155,7 @@ export function HomeParty() {
   }, []);
   return (
     <div className="mt-3 border-t border-ink/5 pt-3">
-      <div className="flex items-center gap-2">
-        <PartyPopper className="size-5 shrink-0 text-[#f08c00]" />
-        <p className="min-w-0 flex-1 text-sm">
-          <b>Throw a party</b>
-          <span className="block text-xs text-muted">Open your door to everyone for 2 hours and invite your friends.</span>
-        </p>
-        <span className="shrink-0 rounded-full bg-ink/5 px-3 py-1.5 text-xs font-semibold text-muted">Coming soon</span>
-      </div>
-      <button onClick={() => setShowBook((s) => !s)} className="mt-3 flex items-center gap-1.5 text-sm font-semibold">
+      <button onClick={() => setShowBook((s) => !s)} className="flex items-center gap-1.5 text-sm font-semibold">
         <BookOpen className="size-4 text-muted" /> Guest book{book ? ` (${book.length})` : ""}
       </button>
       {showBook && (

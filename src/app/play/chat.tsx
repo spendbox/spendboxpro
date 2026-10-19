@@ -2048,7 +2048,14 @@ function Composer({
         </form>
         )
       )}
-      {micError && <p className="mt-1 text-xs text-hit">{micError}</p>}
+      {micError && (
+        <p role="alert" className="mt-1 flex items-start gap-1.5 text-xs text-hit">
+          <span className="min-w-0 flex-1">{micError}</span>
+          <button type="button" onClick={() => setMicError(null)} aria-label="Close" className="grid size-5 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2">
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </p>
+      )}
     </div>
   );
 }

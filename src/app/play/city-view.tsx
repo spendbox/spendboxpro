@@ -6792,16 +6792,28 @@ export function CityView({
       cb.current.onHomeFloors?.(f);
     }
     /**
+     * Where an order goes in this room: a seat ("<room>:seat:<n>"), or "me" for where you're
+     * standing (facing the way in, where the waiter comes from). Undefined when it's not here.
+     */
+    function orderSpot(st: Stage, id: string | null) {
+      const m = id ? /:seat:(\d+)$/.exec(id) : null;
+      const seat = m ? st.seats[Number(m[1])] : undefined;
+      if (seat) return { x: seat.x, z: seat.z, ry: seat.ry };
+      if (id !== "me") return undefined;
+      const from = st.views[0] ?? { lx: 0, lz: 0 };
+      const { x, z } = st.local;
+      return { x, z, ry: Math.atan2(from.lx - x, from.lz - z), standing: true };
+    }
+    /**
      * Food you've ordered (menu ids): a waiter brings it from the way in to your seat and sets it
-     * down on the table in front of you. False when you're not sitting down inside.
+     * down on the table in front of you, or hands it to you where you're standing. False when not inside.
      */
     function serveFood(ids: string[]) {
       if (view?.kind !== "place" || !view.stage.interior) return false;
       const st = view.stage;
       const inside = st.interior;
       if (!inside) return false;
-      const m = mySeatNow ? /:seat:(\d+)$/.exec(mySeatNow) : null;
-      const seat = m ? st.seats[Number(m[1])] : undefined;
+      const seat = orderSpot(st, mySeatNow ?? "me");
       if (!seat) return false;
       const dishes = ids.flatMap((id) => {
         const it = MENU_BY_ID.get(id);
@@ -6811,20 +6823,19 @@ export function CityView({
       const from = st.views[0] ?? { lx: 0, lz: 0 };
       st.service ??= createService(st.holder, inside.group, { x: from.lx, z: from.lz });
       st.service.clear();
-      st.service.serve({ x: seat.x, z: seat.z, ry: seat.ry }, dishes);
+      st.service.serve(seat, dishes);
       return true;
     }
     /**
-     * Bottles ordered at a seat in this room ("<room>:seat:<n>", anyone's): hostesses bring them in
-     * a line from the way in, sparklers lit, the buyer's name on a sign. False when not inside.
+     * Bottles ordered at a seat in this room ("<room>:seat:<n>", anyone's, or "me" standing): hostesses
+     * bring them in a line from the way in, sparklers lit, the buyer's name on a sign. False when not inside.
      */
     function bottleParade(seatId: string, ids: string[], name: string) {
       if (view?.kind !== "place" || !view.stage.interior) return false;
       const st = view.stage;
       const inside = st.interior;
       if (!inside) return false;
-      const m = /:seat:(\d+)$/.exec(seatId);
-      const seat = m ? st.seats[Number(m[1])] : undefined;
+      const seat = orderSpot(st, seatId);
       if (!seat) return false;
       const looks = ids.flatMap((id) => {
         const b = BOTTLE_BY_ID.get(id);
@@ -6833,7 +6844,7 @@ export function CityView({
       if (!looks.length) return false;
       const from = st.views[0] ?? { lx: 0, lz: 0 };
       st.parades ??= createParades(st.holder, inside.group, { x: from.lx, z: from.lz });
-      st.parades.parade({ x: seat.x, z: seat.z, ry: seat.ry }, looks.slice(0, 6), name);
+      st.parades.parade(seat, looks.slice(0, 6), name);
       return true;
     }
     /** Inside a planned home: go to one of its floors (its Floor button). */

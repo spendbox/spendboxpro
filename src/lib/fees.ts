@@ -53,8 +53,8 @@ export function rideFare(kind: string, nairaPerMint = 1_500) {
 }
 
 /**
- * Club entry on a real map (naira, paid once and good for 24 hours): every club charges at the
- * door, ₦250k at most, ₦500k at the better ones, ₦1m for a VIP club and ₦10m at the very top
+ * A club's class on a real map (naira; clubs used to charge this at the door, now they're free
+ * to walk into and it only sets bottle prices and the club's name tag): ₦250k at most, ₦500k at the better ones, ₦1m for a VIP club and ₦10m at the very top
  * (one in ten). Which club charges what is fixed by where it is (the same for everyone). Never for
  * a home's party room. The database takes up to ₥10,000 a door (game-db/118_club_fees.sql).
  */
@@ -71,9 +71,13 @@ export function clubEntryNaira(place: string, type?: string, door?: number) {
   for (const c of place) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return CLUB_ENTRY_NAIRA[h % CLUB_ENTRY_NAIRA.length];
 }
-/** The same in mint. */
+/**
+ * What you pay at the door, in mint: nothing. Clubs are free to walk into; the club's class
+ * (clubEntryNaira, clubTier) still sets its bottle prices and how it's shown.
+ */
 export function clubEntryMint(place: string, type?: string, nairaPerMint = 1_500, door?: number) {
-  return Math.round((clubEntryNaira(place, type, door) / nairaPerMint) * 100) / 100;
+  void place; void type; void nairaPerMint; void door;
+  return 0;
 }
 /** How long a club's entry lasts once paid. */
 export const CLUB_ENTRY_MS = 24 * 3_600_000;

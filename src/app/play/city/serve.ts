@@ -1,12 +1,14 @@
 // Food brought to your table (docs/FOOD.md): you order sitting down, a waiter in a white shirt walks
 // over from the kitchen with a tray, stops beside you, sets the dishes down, and walks back. The
 // plates, bowls and drinks stay on the table in front of you (on whatever's there: a dining table,
-// a coffee table, a bar counter) until you leave. Drawn in the room's own metres, inside its holder.
+// a coffee table, a bar counter) until you leave. Standing up, he walks up to you and hands it over
+// instead (nothing is set down). Drawn in the room's own metres, inside its holder.
 
 import * as THREE from "three";
 import type { Dish } from "@/lib/world/menu";
 
-type Seat = { x: number; z: number; ry: number };
+/** Where you are and which way you face; standing: no table, he hands it to you. */
+type Seat = { x: number; z: number; ry: number; standing?: boolean };
 
 const geo = {
   plate: new THREE.CylinderGeometry(0.13, 0.11, 0.02, 20),
@@ -165,6 +167,7 @@ export function createService(holder: THREE.Object3D, room: THREE.Object3D, kitc
   }
 
   function setDown(t: Trip) {
+    if (t.seat.standing) return;
     const fx = Math.sin(t.seat.ry);
     const fz = Math.cos(t.seat.ry);
     const rx = Math.cos(t.seat.ry);
@@ -211,7 +214,10 @@ export function createService(holder: THREE.Object3D, room: THREE.Object3D, kitc
       // He stops at your side, facing the table.
       const rx = Math.cos(seat.ry);
       const rz = -Math.sin(seat.ry);
-      const stand = new THREE.Vector3(seat.x + rx * 0.55 + Math.sin(seat.ry) * 0.35, 0, seat.z + rz * 0.55 + Math.cos(seat.ry) * 0.35);
+      // Standing: he stops in front of you, facing you.
+      const stand = seat.standing
+        ? new THREE.Vector3(seat.x + Math.sin(seat.ry) * 0.7, 0, seat.z + Math.cos(seat.ry) * 0.7)
+        : new THREE.Vector3(seat.x + rx * 0.55 + Math.sin(seat.ry) * 0.35, 0, seat.z + rz * 0.55 + Math.cos(seat.ry) * 0.35);
       const start = new THREE.Vector3(kitchen.x, 0, kitchen.z);
       const path = [start, stand];
       waiter.position.copy(start);
@@ -243,7 +249,7 @@ export function createService(holder: THREE.Object3D, room: THREE.Object3D, kitc
         } else {
           w.position.y = 0;
           // Turn to the table, lower the tray, set the dishes down, then go.
-          w.rotation.y = tr.seat.ry + Math.PI / 2;
+          w.rotation.y = tr.seat.ry + (tr.seat.standing ? Math.PI : Math.PI / 2);
           if (tr.t > 0.8 && (w.userData.tray as THREE.Object3D[])[1].visible) {
             for (const o of w.userData.tray as THREE.Object3D[]) o.visible = false;
             setDown(tr);

@@ -1,5 +1,5 @@
-// Tests for club entry fees (game-db/067_club_entry.sql, 118_club_fees.sql): every club charges a
-// fixed price at the door, never a home's party room. Run with: npm test
+// Tests for clubs' classes (game-db/067_club_entry.sql, 118_club_fees.sql): every club has a fixed
+// class (it sets bottle prices), and the door is free. Run with: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -18,11 +18,10 @@ test("a home's party room never charges", () => {
   for (let i = 0; i < 50; i++) assert.equal(clubEntryNaira(`b:${i}`, "home"), 0);
 });
 
-test("in mint at the region's price, under the database's cap of 10,000 (game-db/118)", () => {
+test("clubs are free to walk into", () => {
   for (let i = 0; i < 100; i++) {
-    const m = clubEntryMint(`b:${i}`, "club", 1_500);
-    assert.ok(m > 0 && m <= 10_000);
-    assert.equal(m, Math.round((clubEntryNaira(`b:${i}`, "club") / 1_500) * 100) / 100);
+    assert.equal(clubEntryMint(`b:${i}`, "club", 1_500), 0);
+    assert.equal(clubEntryMint(`b:${i}`, "club", 1_500, 10_000_000), 0);
   }
 });
 

@@ -2,10 +2,10 @@
 // a buka, a POS kiosk, a tech startup...) and it grows in stages, Idea → Stall → Shop → Brand →
 // Empire, or fails. Each business has numbers you don't see directly (customers, quality, staff
 // mood, risk, its own cash), shown to you in words. Every day it makes or loses money; when it makes
-// some you're paid your share, up to a cap for its stage (so businesses can't print money). Business
+// some you're paid your share (EARNINGS_BOOST times it), up to a cap for its stage. Business
 // moments, two or three a week, test you (./venture-moments.ts), and what you choose moves the
 // numbers. If its cash runs out there's a crisis; get it wrong and it closes. Failing isn't the end:
-// you keep your home, and you can start again.
+// you keep your home, and you can start again. You can run several at once (up to MAX_VENTURES).
 //
 // Pure rules, shared by the phone (to show it) and the server (which runs the days and pays you,
 // game-db/115). Amounts are in naira; the server turns them into mint.
@@ -68,6 +68,11 @@ export const SERVES = { owner: 20, staff: 25 };
 export const MAX_CATCH_UP_DAYS = 7;
 /** Your share of a good day's profit (the rest stays in the business, to grow it). */
 export const DRAW = 0.6;
+/**
+ * What a business pays you is this many times your share of its profit (and its stage's cap too):
+ * the business's own numbers stay as they are, only what reaches your wallet is bigger.
+ */
+export const EARNINGS_BOOST = 750;
 
 /** A business's numbers. */
 export type Venture = {
@@ -124,7 +129,7 @@ export function ventureDay(v: Venture, rand: () => number): { venture: Venture; 
   const full = v.customers > capacity(v) ? -0.01 : 0;
   // A new business finds its first customers one by one.
   const customers = clamp(v.customers * (1 + spread + full) + (spread > 0 && v.stage === 0 ? 0.5 : 0), 0, st.room * 1.2);
-  const pay = profit > 0 ? Math.min(st.cap, profit * DRAW * v.share) : 0;
+  const pay = profit > 0 ? Math.min(st.cap * EARNINGS_BOOST, profit * DRAW * v.share * EARNINGS_BOOST) : 0;
   const kept = profit > 0 ? profit - profit * DRAW * v.share : profit;
   const next: Venture = {
     ...v,
@@ -136,6 +141,19 @@ export function ventureDay(v: Venture, rand: () => number): { venture: Venture; 
     days: [...v.days, Math.round(profit)].slice(-30),
   };
   return { venture: next, pay: Math.round(pay), profit: Math.round(profit) };
+}
+
+/** How many businesses one person can run at once (game-db/129). */
+export const MAX_VENTURES = 5;
+
+/**
+ * What it makes an hour on an ordinary day as it is now (naira): `pay`, what it pays you (0 when it
+ * makes nothing), and `profit`, what the business itself makes or loses (below 0: losing money).
+ */
+export function ventureHourly(v: Venture) {
+  // An ordinary day: average takings, nothing going wrong.
+  const d = ventureDay(v, () => 0.5);
+  return { pay: Math.round(d.pay / 24), profit: Math.round(d.profit / 24) };
 }
 
 /** Days of business since it was last counted (at most MAX_CATCH_UP_DAYS). */

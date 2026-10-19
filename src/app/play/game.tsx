@@ -966,6 +966,8 @@ export function Game({
   const mySpotZ = worldLife.mySpot?.z ?? null;
   const homeX = worldLife.homeSpot?.x ?? null;
   const homeZ = worldLife.homeSpot?.z ?? null;
+  /** Your home, for a party at your house (Events). */
+  const homeForParty = useMemo(() => (homeX !== null && homeZ !== null ? { x: homeX, z: homeZ, name: "Your home" } : null), [homeX, homeZ]);
   const facesOnMap: CityFriendPin[] = useMemo(() => {
     const live = new Set(friendsAt.map((f) => f.id));
     const myRoom = mySpotX !== null && mySpotZ !== null ? `b:${spiralIndex(Math.round(mySpotX), Math.round(mySpotZ))}` : null;
@@ -1650,6 +1652,17 @@ export function Game({
   useEffect(() => {
     if (seenKeys.current === null) {
       seenKeys.current = new Set(feed.map((f) => f.key));
+      // A location a friend sent while you were away (the last 12 hours, not opened yet): show it
+      // now with Go there, so you know (it only pops up by itself when you're here as it comes).
+      const away = feed.find((f) => f.kind === "location" && !f.read && f.tile != null && Date.now() - Date.parse(f.at) < 12 * 3_600_000);
+      const said = away ? /^\u{1F4CD}\s*(.+?) sent you their location: (.+?)\. Tap to go there/u.exec(away.text) : null;
+      if (away && said && worldId) {
+        const [x, z] = spiralXY(away.tile!);
+        setTimeout(() => {
+          playSfx("chime");
+          setLocPop({ id: "", name: said[1], loc: { region: worldId, x, z, label: said[2] }, at: Date.now() });
+        }, 0);
+      }
       return;
     }
     const fresh = feed.filter((f) => !seenKeys.current!.has(f.key));
@@ -1668,7 +1681,7 @@ export function Game({
       playSfx("chime");
     }, 0);
     return () => clearTimeout(id);
-  }, [feed, feedOpen, quietNow]);
+  }, [feed, feedOpen, quietNow, worldId]);
   useEffect(() => {
     if (!toasts.length) return;
     // The one showing goes after a few seconds, then the next comes in.
@@ -2128,6 +2141,16 @@ export function Game({
   const [challengeLights, setChallengeLights] = useState<ChallengeLight[]>([]);
   // Events (docs/EVENTS.md): what's on and hosting, their beams on the map, and parties' crowds.
   const [eventsOpen, setEventsOpen] = useState(false);
+  /** Events opened from your home's card: straight to hosting a house party there. */
+  const [houseParty, setHouseParty] = useState(false);
+  useEffect(() => {
+    const host = () => {
+      setHouseParty(true);
+      setEventsOpen(true);
+    };
+    window.addEventListener("nt-host-house-party", host);
+    return () => window.removeEventListener("nt-host-house-party", host);
+  }, []);
   const [eventLights, setEventLights] = useState<EventLight[]>([]);
   // An event's beam (or its bubble) tapped on the map: open that event.
   const [eventTapped, setEventTapped] = useState<{ id: number; at: number } | null>(null);
@@ -2847,9 +2870,14 @@ export function Game({
           region={worldId}
           me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }}
           open={eventsOpen}
-          onClose={() => setEventsOpen(false)}
+          onClose={() => {
+            setEventsOpen(false);
+            setHouseParty(false);
+          }}
           where={() => worldLife.centerRef.current?.() ?? null}
           places={worldLife.explore}
+          home={homeForParty}
+          houseParty={houseParty}
           describe={worldLife.describeSpot}
           roads={worldLife.roadsNear}
           openId={eventTapped}
@@ -3413,7 +3441,7 @@ export function Game({
               onPaid: () => startTransition(() => router.refresh()),
               seat: rooms.mySeat,
               door: place?.building ? clubEntryNaira(place.building, placeRoom?.type, clubDoorOf(place.building)) : 0,
-              onBottles: (ids) => rooms.mySeat && paradeTo(rooms.mySeat, ids, me.name ?? "VIP"),
+              onBottles: (ids) => paradeTo(rooms.mySeat ?? "me", ids, me.name ?? "VIP"),
             }}
             onUseStairs={
               placeRoom && (placeRoom.levels?.length ?? 0) > 1
@@ -4291,16 +4319,18 @@ export function Game({
                 <button onClick={() => void goToLocation(locPop.loc)} className="h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink">
                   Go there
                 </button>
-                <button
-                  onClick={() => {
-                    const p = locPop;
-                    setLocPop(null);
-                    chatWith({ id: p.id, name: p.name });
-                  }}
-                  className="h-9 rounded-full bg-white/15 px-3 text-xs font-semibold"
-                >
-                  Open chat
-                </button>
+                {locPop.id && (
+                  <button
+                    onClick={() => {
+                      const p = locPop;
+                      setLocPop(null);
+                      chatWith({ id: p.id, name: p.name });
+                    }}
+                    className="h-9 rounded-full bg-white/15 px-3 text-xs font-semibold"
+                  >
+                    Open chat
+                  </button>
+                )}
               </div>
               <p className="mt-1 text-[10px] text-white/60">Going there costs the usual fare.</p>
             </div>

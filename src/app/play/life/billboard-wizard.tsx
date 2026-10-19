@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Check, ImagePlus } from "@/components/icons";
 import type { AdPricing } from "@/lib/ads";
-import { REGIONS } from "@/lib/world";
 import { billboardPricing } from "../../advertise/actions";
 import { sendAdCheckout } from "../../advertise/send-with-progress";
 import { PreparingOverlay, UploadBar } from "../../advertise/upload-progress";
@@ -13,8 +12,8 @@ import { usePicture } from "../../advertise/use-picture";
 import type { AdPreview } from "./advertise-panel";
 
 // Billboard ads on their own (docs/ADS.md), in three steps over the live map: your ad (it goes up on
-// the billboards round you as you make it), where and for how long (a weekly budget, 1 to 8 weeks),
-// then your details and pay. The money buys time on the city's billboards; nothing else.
+// the billboards round you as you make it), how much and for how long (a weekly budget, 1 to 8
+// weeks; it shows everywhere, to everyone online), then your details and pay. The money buys time on the city's billboards; nothing else.
 
 const naira = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
 const WEEKLY = [5_000, 10_000, 25_000, 50_000];
@@ -22,12 +21,11 @@ const field = "h-11 w-full rounded-xl bg-ink/[0.05] px-4 text-base outline-none 
 
 export const BILLBOARD_STEPS = ["Your ad", "Where & how long", "Details & pay"];
 
-export function BillboardWizard({ step, go, regionId, onPreview }: { step: number; go: (n: number) => void; regionId: string; onPreview: (p: AdPreview | null) => void }) {
+export function BillboardWizard({ step, go, onPreview }: { step: number; go: (n: number) => void; onPreview: (p: AdPreview | null) => void }) {
   const pic = usePicture();
   const [brand, setBrand] = useState("");
   const [headline, setHeadline] = useState("");
   const [link, setLink] = useState("");
-  const [where, setWhere] = useState<string>(regionId);
   const [weekly, setWeekly] = useState(10_000);
   const [typed, setTyped] = useState("");
   const [weeks, setWeeks] = useState(2);
@@ -61,7 +59,6 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
   const maxWeeks = pricing?.maxWeeks ?? 8;
   const total = weekly * weeks;
   const tooBig = !!pricing && total > pricing.maxNgn;
-  const placeName = where ? (REGIONS[where]?.name ?? where) : "all of Nigeria";
 
   const next0 = () => {
     if (pic.preparing !== null) return setError("Your picture is still being prepared. One moment…");
@@ -109,23 +106,14 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             </p>
           )}
           <button onClick={next0} className="h-11 w-full rounded-full bg-ink font-semibold text-white">
-            Next: where and how long
+            Next: how much and how long
           </button>
         </>
       )}
 
       {step === 1 && (
         <>
-          <div>
-            <p className="text-xs font-semibold text-muted">Where should it show?</p>
-            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-              {[regionId, ""].map((id) => (
-                <button key={id || "all"} onClick={() => setWhere(id)} className={`h-11 rounded-xl text-sm font-semibold ${where === id ? "bg-ink text-white" : "bg-ink/[0.05]"}`}>
-                  {id ? (REGIONS[id]?.name ?? id) : "All of Nigeria"}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-[11px] text-muted">Your billboards show to everyone online.</p>
           <div>
             <p className="text-xs font-semibold text-muted">How much a week?</p>
             <div className="mt-1.5 grid grid-cols-4 gap-1.5">
@@ -169,7 +157,7 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             <b>
               {naira(weekly)} a week × {weeks} week{weeks === 1 ? "" : "s"} = {naira(total)}
             </b>
-            <span className="block text-xs text-muted">On billboards in {placeName}, from when it&apos;s checked (usually within a day).</span>
+            <span className="block text-xs text-muted">On billboards for everyone online, from when it&apos;s checked (usually within a day).</span>
           </div>
           <button onClick={next1} className="h-11 w-full rounded-full bg-ink font-semibold text-white">
             Next: your details
@@ -189,7 +177,8 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             form.set("brand", brand);
             form.set("headline", headline);
             form.set("link", link);
-            form.set("region", where);
+            // No state to pick: billboards show everywhere, to everyone online.
+            form.set("region", "");
             form.set("weekly", String(weekly));
             form.set("weeks", String(weeks));
             setBusy(true);
@@ -211,7 +200,7 @@ export function BillboardWizard({ step, go, regionId, onPreview }: { step: numbe
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{brand}</p>
               <p className="text-xs text-muted">
-                {weeks} week{weeks === 1 ? "" : "s"} · {placeName}
+                {weeks} week{weeks === 1 ? "" : "s"} · everyone online
               </p>
             </div>
             <b className="shrink-0">{naira(total)}</b>

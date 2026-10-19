@@ -32,6 +32,7 @@ export function HomeCard({
   onClose,
   onEnter,
   onUpgrade,
+  onParty,
   onRename,
   naming: startNaming = false,
   ownerName,
@@ -46,6 +47,8 @@ export function HomeCard({
   onEnter?: () => void;
   /** The house builder (src/app/play/home/home-builder.tsx). */
   onUpgrade?: () => void;
+  /** Host a house party here (Events, set up for your home). */
+  onParty?: () => void;
   /** Give the home a name; resolves to an error to show, or null when done. */
   onRename?: (name: string) => Promise<string | null>;
   /** Open with the name box ready (a home just given). */
@@ -163,6 +166,11 @@ export function HomeCard({
                 </button>
               )}
             </div>
+            {onParty && (
+              <button onClick={onParty} className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#d6336c] to-[#7048e8] text-sm font-semibold text-white">
+                🎉 Host a house party
+              </button>
+            )}
 
             {children}
 

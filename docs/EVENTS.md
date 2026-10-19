@@ -44,7 +44,8 @@ Going into any event (or hosting one and going in) counts
 2. **A name** (3 to 60 letters) and, if you like, what to expect.
 3. **Where**: any named road within about 2 km of the middle of the map (its real name), or a
    place near you: landmarks, restaurants, clubs, parks, stadiums, markets (the same list as
-   Explore). Places that suit the format come first. A party on the street plays its crowd along
+   Explore). **Your home** is on the list for any party (first, and picked by itself for a House
+   party), priced like a street; the server checks it really is your home. Your home's card (the house button) has **Host a house party**: Events opens straight on hosting, set to a House party at your home, named "House party" (change it), at the name step. Places that suit the format come first. A party on the street plays its crowd along
    that road. **Choose on the map** tucks the card away (everything filled in is kept): a pin
    stands in the middle of the screen with the party's area round it, the road under it is named
    as you move, and **Use this spot** brings the card back with that road picked.

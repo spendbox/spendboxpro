@@ -1106,6 +1106,15 @@ export function useWorldLife({
                 }
               : undefined
           }
+          onParty={
+            signedIn && homeUnit
+              ? () => {
+                  setHomeOpen(false);
+                  // Events (game.tsx) opens on hosting a house party here.
+                  window.dispatchEvent(new Event("nt-host-house-party"));
+                }
+              : undefined
+          }
         >
           {signedIn && rental && rental.unit === homeUnit && (
             <div className="mt-3 rounded-2xl bg-ink/5 p-3 text-sm">
