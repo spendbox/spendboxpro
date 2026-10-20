@@ -29,6 +29,7 @@ import type { MasqIdle, MasqView } from "@/app/api/masquerade/route";
 import { whileHere } from "./activity";
 import { OnTopPage } from "./on-top";
 import { Mask } from "./masq-icon";
+import { loadMasqPrefs, saveMasqPrefs, setMasqOpenSwitch, useMasqOpen, type MasqPrefs } from "./masq-open";
 export { Mask };
 
 // Masquerade (docs/MASQUERADE.md): 5 minutes of chat with someone new, both masked; names and faces
@@ -57,6 +58,7 @@ const viewNow = (id: number) =>
 /** The Masquerade row at the top of your chats: how many are masked right now. */
 export function MasqueradeCard({ onOpen }: { onOpen: () => void }) {
   const [idle, setIdle] = useState<MasqIdle | null>(null);
+  const askable = useMasqOpen();
   useEffect(() => {
     let alive = true;
     const look = () => void idleNow().then((i) => alive && i && setIdle(i));
@@ -75,7 +77,9 @@ export function MasqueradeCard({ onOpen }: { onOpen: () => void }) {
       </span>
       <span className="min-w-0 flex-1">
         <b className="block text-lg">Masquerade</b>
-        <span className="block text-sm text-[#cfc6ee]">{idle?.live ? "You're in one. Tap to go back" : "5 minutes with someone new. Faces hidden."}</span>
+        <span className="block text-sm text-[#cfc6ee]">
+          {idle?.live ? "You're in one. Tap to go back" : askable ? "You're open to it: we'll pop up when someone's looking." : "5 minutes with someone new. Faces hidden."}
+        </span>
       </span>
       {!!idle && idle.masked > 0 && (
         <span className="shrink-0 rounded-xl px-2.5 py-1 text-xs font-extrabold" style={{ background: GOLD, color: NIGHT }}>
@@ -88,18 +92,7 @@ export function MasqueradeCard({ onOpen }: { onOpen: () => void }) {
 
 type Line = { key: string; side: "a" | "b"; text: string };
 
-/** What you'd like from a masquerade (remembered on this phone). */
-type Prefs = { mode: MasqMode; want: MasqWant; ageMin: number; ageMax: number; spice: MasqSpice };
-const PREFS_KEY = "nt-masq";
-const DEFAULT_PREFS: Prefs = { mode: "friends", want: "anyone", ageMin: MASQ_AGE_MIN, ageMax: 40, spice: 1 };
-function loadPrefs(): Prefs {
-  try {
-    const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "null") as Partial<Prefs> | null;
-    return { ...DEFAULT_PREFS, ...(p ?? {}) };
-  } catch {
-    return DEFAULT_PREFS;
-  }
-}
+type Prefs = MasqPrefs;
 const spiceOf = (n: number) => MASQ_SPICE[Math.max(0, Math.min(3, n))];
 
 export function Masquerade({
@@ -124,16 +117,14 @@ export function Masquerade({
   onDating: () => void;
 }) {
   const [idle, setIdle] = useState<MasqIdle | null>(null);
-  const [prefs, setPrefsNow] = useState<Prefs>(loadPrefs);
-  const setPrefs = (p: Partial<Prefs>) =>
-    setPrefsNow((was) => {
-      const next = { ...was, ...p };
-      if (next.ageMax < next.ageMin) next.ageMax = next.ageMin;
-      try {
-        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+  const [prefs, setPrefsNow] = useState<Prefs>(loadMasqPrefs);
+  const setPrefs = (p: Partial<Prefs>) => {
+    const next = { ...prefs, ...p };
+    if (next.ageMax < next.ageMin) next.ageMax = next.ageMin;
+    setPrefsNow(next);
+    saveMasqPrefs(next);
+  };
+  const open = useMasqOpen();
   const mode = prefs.mode;
   const [waiting, setWaiting] = useState(false);
   const [view, setView] = useState<MasqView | null>(null);
@@ -235,6 +226,17 @@ export function Masquerade({
             onStart={() => void start()}
             onClose={close}
             onDating={onDating}
+            open={open}
+            onOpen={async (on) => {
+              setError(null);
+              if (on && masqNeedsDating(mode) && !idle?.datingOpen) {
+                const i = await idleNow();
+                if (i) setIdle(i);
+                if (!i?.datingOpen) return setError("Dating and spicy link-ups are for people open to dating. Switch it on first, or come for friends.");
+              }
+              setMasqOpenSwitch(on);
+              if (!on) void api({ action: "open", on: false });
+            }}
             onGender={async (g) => {
               const r = await setGender(g);
               if (r.ok) setIdle((i) => (i ? { ...i, gender: g } : i));
@@ -255,6 +257,8 @@ function Start({
   onStart,
   onClose,
   onDating,
+  open,
+  onOpen,
   onGender,
 }: {
   idle: MasqIdle | null;
@@ -264,6 +268,9 @@ function Start({
   onStart: () => void;
   onClose: () => void;
   onDating: () => void;
+  /** Open to Masquerade: asked by pop-up while playing or chatting. */
+  open: boolean;
+  onOpen: (on: boolean) => void;
   onGender: (g: "male" | "female") => void;
 }) {
   const left = idle ? Math.max(0, idle.perDay - idle.today) : null;
@@ -359,6 +366,23 @@ function Start({
             <p className="pt-2 text-[13px] leading-snug text-[#b9b0dc]">Until you say, you only meet people looking for anyone.</p>
           </>
         )}
+        <button
+          role="switch"
+          aria-checked={open}
+          onClick={() => onOpen(!open)}
+          className="mt-7 flex w-full items-center gap-3.5 rounded-2xl px-4 py-3.5 text-left"
+          style={{ background: PANEL }}
+        >
+          <span className="min-w-0 flex-1">
+            <b className="block text-[15px]">Open to Masquerade</b>
+            <span className="mt-0.5 block text-[13px] leading-snug text-[#b9b0dc]">
+              {open ? "On. Carry on playing or chatting: you'll get a pop-up when someone masked is looking for someone like you." : "Get a pop-up when someone masked is looking for someone like you, while you play or chat."}
+            </span>
+          </span>
+          <span className={cn("relative h-8 w-[52px] shrink-0 rounded-full transition-colors", open ? "bg-[#ffc53d]" : "bg-white/20")}>
+            <span className={cn("absolute top-1 size-6 rounded-full bg-white shadow transition-[left]", open ? "left-[24px]" : "left-1")} />
+          </span>
+        </button>
         {error && <p className="mt-4 rounded-2xl bg-[#e03131]/20 px-4 py-3 text-sm text-[#ffc9c9]">{error}</p>}
       </div>
       <div className="flex flex-col gap-2.5 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">

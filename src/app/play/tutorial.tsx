@@ -348,7 +348,7 @@ export function Tutorial({
   const masqCard: Card = {
     emoji: "🎭",
     title: "Masquerade",
-    text: "Tap the mask (top right, beside the games) to chat with someone new for 5 minutes, both masked. Pick who you'd like to meet and how spicy the questions get. If you both tap Unmask, you see each other. If not, nobody knows who said no.",
+    text: "Tap the mask (top right, beside the games) to chat with someone new for 5 minutes, both masked. Pick who you'd like to meet and how spicy the questions get. If you both tap Unmask, you see each other. If not, nobody knows who said no. Switch on Open to Masquerade and you get a pop-up when someone masked is looking, while you play.",
     glow: "masq",
     action: { label: "Try it", run: actions.masquerade },
   };

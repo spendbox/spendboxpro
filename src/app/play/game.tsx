@@ -146,6 +146,7 @@ import { liteOffered, liteServer, liteSnapshot, markLiteOffered, setLite as swit
 import type { EventView } from "./events/event-actions";
 import { cardPreview } from "./people/card-cache";
 import { Mask } from "./masq-icon";
+import { useMasqOpen } from "./masq-open";
 import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
@@ -224,6 +225,7 @@ const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.Sp
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
 const Masquerade = dynamic(() => import("./masquerade").then((m) => m.Masquerade));
 const MasqueradeCard = dynamic(() => import("./masquerade").then((m) => m.MasqueradeCard));
+const MasqInvites = dynamic(() => import("./masq-invite").then((m) => m.MasqInvites));
 const LiteCamera = dynamic(() => import("./lite/lite-camera").then((m) => m.LiteCamera));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
 const TripLayer = dynamic(() => import("./trip/trip-layer").then((m) => m.TripLayer), { ssr: false });
@@ -638,6 +640,8 @@ export function Game({
   const [liteOffer, setLiteOffer] = useState(false);
   /** Masquerade (docs/MASQUERADE.md): 5 minutes masked with someone new. */
   const [masqOpen, setMasqOpen] = useState(false);
+  /** Open to Masquerade: a pop-up when someone masked is looking (while playing or chatting). */
+  const masqAskable = useMasqOpen();
   /** Lite's camera: the phone's own (there's no town for the game's camera to take). */
   const [liteCamera, setLiteCamera] = useState(false);
   /** What's on (from Events, for Lite's own list), going into one, and hosting one kind. */
@@ -4734,6 +4738,15 @@ export function Game({
             />
           </div>
         </Sheet>
+      )}
+      {masqAskable && worldId && !guest && (
+        <MasqInvites
+          region={worldId}
+          where={() => worldLife.mySpot ?? worldLife.homeSpot ?? worldLife.centerRef.current?.() ?? null}
+          paused={masqOpen}
+          onAccepted={() => setMasqOpen(true)}
+          onMessage={(text) => setMessage({ text, tone: "info" })}
+        />
       )}
       {masqOpen && worldId && !guest && (
         <Masquerade

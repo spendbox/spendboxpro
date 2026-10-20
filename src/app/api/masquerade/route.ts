@@ -32,6 +32,15 @@ import {
 // POST {action: "say", id, text}              a message (kept for reports)
 // POST {action: "next", id}                   another question
 // POST {action: "report", id, note}           report them (it ends there, and you're never matched again)
+// POST {action: "open", on, mode, want, ageMin, ageMax, spice, region, x, z}
+//                                             Open to Masquerade on (again once a minute) or off:
+//                                             your live channel, and anyone asking for you now
+// POST {action: "answer", invite, yes}        "A masked guest wants to talk": yes or not now
+//
+// Someone masks up and nobody fitting is waiting: the database asks someone Open to Masquerade
+// (masq_invites), and the server tells their phone at once on its own live channel
+// (`masqopen:<token>`, the token told only to them) with what the pop-up shows: where, why and
+// how spicy. No name, no face.
 
 type Row = {
   id: number;
@@ -82,6 +91,8 @@ export type MasqView = {
   other: { id: string; name: string; avatar: unknown } | null;
   said: { side: "a" | "b"; text: string; at: string }[];
 };
+/** The pop-up: "A masked guest wants to talk". */
+export type MasqInvite = { id: number; area: string | null; mode: MasqMode; spice: MasqSpice; seconds: number };
 export type MasqIdle = {
   masked: number;
   today: number;
@@ -99,6 +110,7 @@ const ERRORS: Record<string, string> = {
   not_yet: "Wait for the time to run out first.",
   too_fast: "Slow down a little.",
   gone: "That masquerade is over.",
+  missed: "Too late: they found someone else. You'll be asked again.",
   off: "Masquerade is switched on soon.",
 };
 const fail = (code: string) => NextResponse.json({ ok: false, error: ERRORS[code] ?? "That didn't work. Try again." });
@@ -109,6 +121,48 @@ const codeOf = (msg: string) => {
 };
 
 const db = () => createAdminClient();
+
+const prefsOf = (body: Record<string, unknown> | null) => ({
+  mode: (body?.mode === "dating" || body?.mode === "linkup" ? body.mode : "friends") as MasqMode,
+  want: (["men", "women", "anyone"].includes(String(body?.want)) ? body?.want : "anyone") as MasqWant,
+  ageMin: Math.max(MASQ_AGE_MIN, Math.min(MASQ_AGE_MAX, Math.round(Number(body?.ageMin) || MASQ_AGE_MIN))),
+  ageMax: Math.max(MASQ_AGE_MIN, Math.min(MASQ_AGE_MAX, Math.round(Number(body?.ageMax) || MASQ_AGE_MAX))),
+  spice: Math.max(0, Math.min(3, Math.round(Number(body?.spice) || 0))),
+});
+
+type InviteRow = { id: number; to_user: string; mode: MasqMode; from_area: string | null; from_spice: number; expires_at: string };
+const inviteOf = (i: InviteRow): MasqInvite => ({
+  id: Number(i.id),
+  area: i.from_area,
+  mode: i.mode,
+  spice: Math.max(0, Math.min(3, Math.round(i.from_spice ?? 1))) as MasqSpice,
+  seconds: Math.max(0, Math.round((Date.parse(i.expires_at) - Date.now()) / 1000)),
+});
+
+/** Someone's just been asked for you: tell their phone now (once). */
+async function tellAsked(fromUser: string) {
+  const { data } = await db()
+    .from("masq_invites")
+    .update({ told: true })
+    .eq("from_user", fromUser)
+    .eq("status", "asking")
+    .eq("told", false)
+    .select("id, to_user, mode, from_area, from_spice, expires_at");
+  for (const i of (data ?? []) as InviteRow[]) {
+    const { data: open } = await db().from("masq_open").select("token").eq("user_id", i.to_user).maybeSingle();
+    if (!open?.token) continue;
+    const sb = db();
+    const ch = sb.channel(`masqopen:${open.token}`);
+    try {
+      await ch.httpSend("asked", inviteOf(i));
+    } catch (e) {
+      // Their phone looks again within a minute anyway.
+      console.error("Masquerade invite not sent", e instanceof Error ? e.message : e);
+    } finally {
+      void sb.removeChannel(ch);
+    }
+  }
+}
 
 async function viewOf(r: Row, userId: string): Promise<MasqView> {
   const side = r.a === userId ? "a" : "b";
@@ -196,32 +250,93 @@ export async function POST(req: NextRequest) {
   const action = String(body?.action ?? "");
   const id = Number(body?.id);
 
-  if (action === "join") {
-    const mode: MasqMode = body?.mode === "dating" || body?.mode === "linkup" ? body.mode : "friends";
+  if (action === "join" || (action === "open" && body?.on)) {
+    const p = prefsOf(body);
     const region = String(body?.region ?? "lagos");
     const map = regionMap(region);
     if (!map) return fail("bad_region");
     const x = Math.round(Number(body?.x) || 0);
     const z = Math.round(Number(body?.z) || 0);
+    const area = map.areaAt(x, z) || null;
+    if (action === "open") {
+      const { data: token, error } = await db().rpc("masq_set_open", {
+        p_user: userId,
+        p_on: true,
+        p_region: region,
+        p_mode: p.mode,
+        p_x: x,
+        p_z: z,
+        p_area: area,
+        p_want: p.want,
+        p_age_min: p.ageMin,
+        p_age_max: p.ageMax,
+        p_spice: p.spice,
+        p_token: randomBytes(12).toString("base64url"),
+      });
+      if (error) return fail(codeOf(error.message));
+      const { data: asking } = await db()
+        .from("masq_invites")
+        .select("id, to_user, mode, from_area, from_spice, expires_at")
+        .eq("to_user", userId)
+        .eq("status", "asking")
+        .gt("expires_at", new Date().toISOString())
+        .order("id", { ascending: false })
+        .limit(1);
+      const i = (asking?.[0] as InviteRow | undefined) ?? null;
+      return NextResponse.json({ ok: true, channel: `masqopen:${token}`, invite: i ? inviteOf(i) : null }, { headers: { "Cache-Control": "private, no-store" } });
+    }
     const { data, error } = await db().rpc("masq_join", {
       p_user: userId,
       p_region: region,
-      p_mode: mode,
+      p_mode: p.mode,
       p_x: x,
       p_z: z,
-      p_area: map.areaAt(x, z) || null,
+      p_area: area,
       p_secret: randomBytes(12).toString("base64url"),
       p_minutes: MASQ_MINUTES,
       p_per_day: MASQ_PER_DAY,
-      p_want: (["men", "women", "anyone"].includes(String(body?.want)) ? body?.want : "anyone") as MasqWant,
-      p_age_min: Math.max(MASQ_AGE_MIN, Math.min(MASQ_AGE_MAX, Math.round(Number(body?.ageMin) || MASQ_AGE_MIN))),
-      p_age_max: Math.max(MASQ_AGE_MIN, Math.min(MASQ_AGE_MAX, Math.round(Number(body?.ageMax) || MASQ_AGE_MAX))),
-      p_spice: Math.max(0, Math.min(3, Math.round(Number(body?.spice) || 0))),
+      p_want: p.want,
+      p_age_min: p.ageMin,
+      p_age_max: p.ageMax,
+      p_spice: p.spice,
     });
     if (error) return fail(codeOf(error.message));
-    if (!data) return NextResponse.json({ ok: true, waiting: true });
+    if (!data) {
+      await tellAsked(userId);
+      return NextResponse.json({ ok: true, waiting: true });
+    }
     const r = await sessionOf(Number(data), userId);
     return NextResponse.json({ ok: true, view: r ? await viewOf(r, userId) : null });
+  }
+  if (action === "open") {
+    await db().rpc("masq_set_open", {
+      p_user: userId,
+      p_on: false,
+      p_region: "",
+      p_mode: "friends",
+      p_x: 0,
+      p_z: 0,
+      p_area: null,
+      p_want: "anyone",
+      p_age_min: MASQ_AGE_MIN,
+      p_age_max: MASQ_AGE_MAX,
+      p_spice: 1,
+      p_token: "",
+    });
+    return NextResponse.json({ ok: true });
+  }
+  if (action === "answer") {
+    const yes = body?.yes === true;
+    const { data, error } = await db().rpc("masq_answer", {
+      p_user: userId,
+      p_invite: Math.round(Number(body?.invite) || 0),
+      p_yes: yes,
+      p_secret: randomBytes(12).toString("base64url"),
+      p_minutes: MASQ_MINUTES,
+      p_per_day: MASQ_PER_DAY,
+    });
+    if (error) return fail(codeOf(error.message));
+    return NextResponse.json({ ok: true, id: data ? Number(data) : null });
   }
   if (action === "cancel") {
     await db().rpc("masq_cancel", { p_user: userId });

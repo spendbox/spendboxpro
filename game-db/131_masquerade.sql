@@ -4,6 +4,8 @@
 --   masq_queue     who's waiting to be matched (gone after 2 minutes without a word from them)
 --   masq_sessions  each masquerade: the two players (a and b), how it's going, what each chose
 --   masq_messages  what was said, kept for reports (cleared after 7 days)
+--   masq_open      who's switched on Open to Masquerade (asked by pop-up when someone masks up)
+--   masq_invites   those pop-ups: who asked whom, and what they said (20 seconds to answer)
 --
 -- The server (src/app/api/masquerade) does everything through the functions below; phones only
 -- talk to each other on the masquerade's own live channel, by side ("a" or "b"), never by name.
@@ -76,9 +78,51 @@ create table if not exists public.masq_messages (
 create index if not exists masq_messages_session_idx on public.masq_messages (session_id, id);
 alter table public.masq_messages enable row level security;
 
-revoke all on table public.masq_queue, public.masq_sessions, public.masq_messages from public, anon, authenticated;
-grant all on table public.masq_queue, public.masq_sessions, public.masq_messages to service_role;
-grant usage, select on sequence public.masq_sessions_id_seq, public.masq_messages_id_seq to service_role;
+-- Open to Masquerade: playing or chatting as usual, but happy to be asked. Kept fresh by their
+-- phone (once a minute while the game is open); gone from the asking after 150 seconds without.
+-- Their live channel's secret part (token) is where the server tells them they're being asked.
+create table if not exists public.masq_open (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  region text not null,
+  mode text not null check (mode in ('friends', 'dating', 'linkup')),
+  x integer not null default 0,
+  z integer not null default 0,
+  area text,
+  want text not null default 'anyone' check (want in ('men', 'women', 'anyone')),
+  age_min integer not null default 18,
+  age_max integer not null default 80,
+  spice integer not null default 1 check (spice between 0 and 3),
+  gender text,
+  age integer,
+  token text not null,
+  seen_at timestamptz not null default now()
+);
+create index if not exists masq_open_region_idx on public.masq_open (region, mode, seen_at);
+alter table public.masq_open enable row level security;
+
+-- "A masked guest wants to talk": asked one at a time, 20 seconds to say yes.
+create table if not exists public.masq_invites (
+  id bigserial primary key,
+  from_user uuid not null references public.profiles (id) on delete cascade,
+  to_user uuid not null references public.profiles (id) on delete cascade,
+  region text not null,
+  mode text not null,
+  from_area text,
+  from_spice integer not null default 1,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  status text not null default 'asking' check (status in ('asking', 'accepted', 'declined', 'missed')),
+  -- Whether their phone has been told (the server tells it once, on the live channel).
+  told boolean not null default false,
+  session_id bigint references public.masq_sessions (id) on delete set null
+);
+create index if not exists masq_invites_to_idx on public.masq_invites (to_user, created_at desc);
+create index if not exists masq_invites_from_idx on public.masq_invites (from_user, created_at desc);
+alter table public.masq_invites enable row level security;
+
+revoke all on table public.masq_queue, public.masq_sessions, public.masq_messages, public.masq_open, public.masq_invites from public, anon, authenticated;
+grant all on table public.masq_queue, public.masq_sessions, public.masq_messages, public.masq_open, public.masq_invites to service_role;
+grant usage, select on sequence public.masq_sessions_id_seq, public.masq_messages_id_seq, public.masq_invites_id_seq to service_role;
 
 drop function if exists public.masq_join(uuid, text, text, integer, integer, text, text, integer, integer);
 
@@ -88,8 +132,10 @@ drop function if exists public.masq_join(uuid, text, text, integer, integer, tex
  * women or anyone; their age in your range and yours in theirs). Not someone either of you
  * blocked, met in the last day, or ever reported in a masquerade. Otherwise you wait (call again
  * every few seconds: it keeps your place and tries again). Someone who hasn't said whether they're
- * a man or a woman only meets people asking for anyone. Returns the masquerade's id, or null while
- * waiting. Your live one, if any, comes back as it is. Errors: too_many (p_per_day today),
+ * a man or a woman only meets people asking for anyone. Nobody waiting who fits: someone Open to
+ * Masquerade who fits is asked instead (one at a time, nearest first, 20 seconds to say yes; not
+ * someone you asked today, nor someone who said no or missed one in the last 5 minutes). Returns
+ * the masquerade's id, or null while waiting. Your live one, if any, comes back as it is. Errors: too_many (p_per_day today),
  * dating_off (here for dating but not open to it).
  */
 create or replace function public.masq_join(
@@ -101,6 +147,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_id bigint;
   v_other public.masq_queue;
+  v_open public.masq_open;
   v_gender text;
   v_age integer;
   v_min integer := greatest(18, least(coalesce(p_age_min, 18), 99));
@@ -146,20 +193,138 @@ begin
       joined_at = case when public.masq_queue.region = excluded.region and public.masq_queue.mode = excluded.mode then public.masq_queue.joined_at else now() end,
       region = excluded.region, mode = excluded.mode, x = excluded.x, z = excluded.z, area = excluded.area, seen_at = now(),
       want = excluded.want, age_min = excluded.age_min, age_max = excluded.age_max, spice = excluded.spice, gender = excluded.gender, age = excluded.age;
+    -- Nobody waiting: ask someone open to it (unless someone's being asked for you already).
+    if not exists (select 1 from public.masq_invites where from_user = p_user and status = 'asking' and expires_at > now()) then
+      select o.* into v_open from public.masq_open o
+       where o.region = p_region and o.mode = p_mode and o.user_id <> p_user
+         and o.seen_at > now() - interval '150 seconds'
+         and (p_want = 'anyone' or (p_want = 'men' and o.gender = 'male') or (p_want = 'women' and o.gender = 'female'))
+         and (o.want = 'anyone' or (o.want = 'men' and v_gender = 'male') or (o.want = 'women' and v_gender = 'female'))
+         and (o.age is null or o.age between v_min and v_max)
+         and (v_age is null or v_age between o.age_min and o.age_max)
+         and not exists (select 1 from public.blocks k where (k.blocker = p_user and k.blocked = o.user_id) or (k.blocker = o.user_id and k.blocked = p_user))
+         and not exists (
+           select 1 from public.masq_sessions s
+            where ((s.a = p_user and s.b = o.user_id) or (s.a = o.user_id and s.b = p_user))
+              and (s.started_at > now() - interval '1 day' or s.ended_why = 'reported'))
+         -- Not busy: masked up themselves, in one, or being asked by someone else.
+         and not exists (select 1 from public.masq_queue q2 where q2.user_id = o.user_id)
+         and not exists (select 1 from public.masq_sessions s where (s.a = o.user_id or s.b = o.user_id) and s.status = 'live' and s.ends_at > now() - interval '90 seconds')
+         and not exists (select 1 from public.masq_invites i where i.to_user = o.user_id and i.status = 'asking' and i.expires_at > now())
+         -- Not asked by you today; a rest after saying no (or missing one).
+         and not exists (select 1 from public.masq_invites i where i.from_user = p_user and i.to_user = o.user_id and i.created_at > now() - interval '1 day')
+         and not exists (select 1 from public.masq_invites i where i.to_user = o.user_id and i.status in ('declined', 'missed') and i.created_at > now() - interval '5 minutes')
+         and (select count(*) from public.masq_sessions s where (s.a = o.user_id or s.b = o.user_id) and s.started_at > now() - interval '1 day') < p_per_day
+       order by (o.x - p_x)::bigint * (o.x - p_x) + (o.z - p_z)::bigint * (o.z - p_z), o.seen_at desc
+       limit 1
+       for update skip locked;
+      if v_open.user_id is not null then
+        update public.masq_invites set status = 'missed' where from_user = p_user and status = 'asking';
+        insert into public.masq_invites (from_user, to_user, region, mode, from_area, from_spice, expires_at)
+        values (p_user, v_open.user_id, p_region, p_mode, left(p_area, 60), v_spice, now() + interval '20 seconds');
+      end if;
+    end if;
     return null;
   end if;
   delete from public.masq_queue where user_id in (p_user, v_other.user_id);
+  update public.masq_invites set status = 'missed' where from_user in (p_user, v_other.user_id) and status = 'asking';
   insert into public.masq_sessions (a, b, mode, secret, a_area, b_area, a_spice, b_spice, ends_at)
   values (v_other.user_id, p_user, p_mode, p_secret, v_other.area, left(p_area, 60), v_other.spice, v_spice, now() + make_interval(mins => p_minutes))
   returning id into v_id;
   return v_id;
 end $$;
 
-/** Take your mask off the waiting list. */
+/** Take your mask off the waiting list (and stop asking anyone for you). */
 create or replace function public.masq_cancel(p_user uuid) returns void
 language sql security definer set search_path = public as $$
   delete from public.masq_queue where user_id = p_user;
+  update public.masq_invites set status = 'missed' where from_user = p_user and status = 'asking';
 $$;
+
+/**
+ * Open to Masquerade, switched on (and kept fresh: the phone calls again once a minute) with what
+ * you'd like (the same as when you put on your mask yourself), or off. Returns your channel's
+ * secret part (p_token the first time; the same one after). Errors: dating_off.
+ */
+create or replace function public.masq_set_open(
+  p_user uuid, p_on boolean, p_region text, p_mode text, p_x integer, p_z integer, p_area text,
+  p_want text, p_age_min integer, p_age_max integer, p_spice integer, p_token text
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_token text;
+  v_min integer := greatest(18, least(coalesce(p_age_min, 18), 99));
+  v_max integer := greatest(18, least(coalesce(p_age_max, 99), 99));
+begin
+  if not p_on then
+    delete from public.masq_open where user_id = p_user;
+    update public.masq_invites set status = 'declined' where to_user = p_user and status = 'asking';
+    return null;
+  end if;
+  if p_mode not in ('friends', 'dating', 'linkup') then raise exception 'bad_mode'; end if;
+  if p_want not in ('men', 'women', 'anyone') then raise exception 'bad_want'; end if;
+  if p_mode in ('dating', 'linkup') and not coalesce((select dating_open from public.profiles where id = p_user), false) then
+    raise exception 'dating_off';
+  end if;
+  insert into public.masq_open (user_id, region, mode, x, z, area, want, age_min, age_max, spice, gender, age, token)
+  select p_user, p_region, p_mode, p_x, p_z, left(p_area, 60), p_want, v_min, greatest(v_min, v_max),
+         greatest(0, least(coalesce(p_spice, 1), 3)), gender, extract(year from age(birth_date))::integer, p_token
+    from public.profiles where id = p_user
+  on conflict (user_id) do update set
+    region = excluded.region, mode = excluded.mode, x = excluded.x, z = excluded.z, area = excluded.area,
+    want = excluded.want, age_min = excluded.age_min, age_max = excluded.age_max, spice = excluded.spice,
+    gender = excluded.gender, age = excluded.age, seen_at = now()
+  returning token into v_token;
+  return v_token;
+end $$;
+
+/**
+ * Your answer to "a masked guest wants to talk": no (they ask the next person), or yes: the
+ * masquerade starts (you're b; they waited, so they're a). Returns its id (null for a no).
+ * Errors: gone (not yours), missed (too late, or they found someone else), too_many.
+ */
+create or replace function public.masq_answer(
+  p_user uuid, p_invite bigint, p_yes boolean, p_secret text, p_minutes integer, p_per_day integer
+) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare
+  v_inv public.masq_invites;
+  v_q public.masq_queue;
+  v_open public.masq_open;
+  v_id bigint;
+begin
+  select * into v_inv from public.masq_invites where id = p_invite and to_user = p_user;
+  if not found then raise exception 'gone'; end if;
+  if not p_yes then
+    update public.masq_invites set status = 'declined' where id = v_inv.id and status = 'asking';
+    return null;
+  end if;
+  perform pg_advisory_xact_lock(hashtext('masq:' || v_inv.region));
+  select * into v_inv from public.masq_invites where id = p_invite for update;
+  if v_inv.status = 'accepted' then return v_inv.session_id; end if;
+  -- A few seconds' grace for a slow connection.
+  if v_inv.status <> 'asking' or v_inv.expires_at < now() - interval '3 seconds' then
+    update public.masq_invites set status = 'missed' where id = v_inv.id and status = 'asking';
+    raise exception 'missed';
+  end if;
+  if (select count(*) from public.masq_sessions where (a = p_user or b = p_user) and started_at > now() - interval '1 day') >= p_per_day then
+    raise exception 'too_many';
+  end if;
+  select * into v_q from public.masq_queue
+   where user_id = v_inv.from_user and region = v_inv.region and mode = v_inv.mode and seen_at > now() - interval '2 minutes'
+   for update;
+  if not found or exists (select 1 from public.masq_sessions where (a = p_user or b = p_user) and status = 'live' and ends_at > now() - interval '90 seconds') then
+    update public.masq_invites set status = 'missed' where id = v_inv.id;
+    raise exception 'missed';
+  end if;
+  select * into v_open from public.masq_open where user_id = p_user;
+  delete from public.masq_queue where user_id in (p_user, v_inv.from_user);
+  insert into public.masq_sessions (a, b, mode, secret, a_area, b_area, a_spice, b_spice, ends_at)
+  values (v_inv.from_user, p_user, v_inv.mode, p_secret, v_q.area, v_open.area, v_q.spice, coalesce(v_open.spice, 1), now() + make_interval(mins => p_minutes))
+  returning id into v_id;
+  update public.masq_invites set status = 'accepted', session_id = v_id where id = v_inv.id;
+  return v_id;
+end $$;
 
 /**
  * Your choice: 'unmask' or 'more' once the time is up, 'pass' then, or 'left' any time (leaving) or
@@ -205,6 +370,9 @@ language sql security definer set search_path = public as $$
   update public.masq_sessions set status = 'ended', ended_why = 'timeout'
    where status = 'live' and ends_at < now() - make_interval(secs => p_decide);
   delete from public.masq_messages where created_at < now() - interval '7 days';
+  update public.masq_invites set status = 'missed' where status = 'asking' and expires_at < now() - interval '10 seconds';
+  delete from public.masq_invites where created_at < now() - interval '7 days';
+  delete from public.masq_open where seen_at < now() - interval '1 day';
 $$;
 
 /** Say something (kept for reports). At most one message a second each. Errors: gone, too_fast. */
@@ -233,12 +401,16 @@ $$;
 
 revoke all on function public.masq_join(uuid, text, text, integer, integer, text, text, integer, integer, text, integer, integer, integer) from public, anon, authenticated;
 revoke all on function public.masq_cancel(uuid) from public, anon, authenticated;
+revoke all on function public.masq_set_open(uuid, boolean, text, text, integer, integer, text, text, integer, integer, integer, text) from public, anon, authenticated;
+revoke all on function public.masq_answer(uuid, bigint, boolean, text, integer, integer) from public, anon, authenticated;
 revoke all on function public.masq_choose(uuid, bigint, text, integer) from public, anon, authenticated;
 revoke all on function public.masq_expire(integer) from public, anon, authenticated;
 revoke all on function public.masq_say(uuid, bigint, text) from public, anon, authenticated;
 revoke all on function public.masq_next_question(uuid, bigint) from public, anon, authenticated;
 grant execute on function public.masq_join(uuid, text, text, integer, integer, text, text, integer, integer, text, integer, integer, integer) to service_role;
 grant execute on function public.masq_cancel(uuid) to service_role;
+grant execute on function public.masq_set_open(uuid, boolean, text, text, integer, integer, text, text, integer, integer, integer, text) to service_role;
+grant execute on function public.masq_answer(uuid, bigint, boolean, text, integer, integer) to service_role;
 grant execute on function public.masq_choose(uuid, bigint, text, integer) to service_role;
 grant execute on function public.masq_expire(integer) to service_role;
 grant execute on function public.masq_say(uuid, bigint, text) to service_role;

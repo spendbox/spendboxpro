@@ -5,13 +5,15 @@ Newtown's own way to meet people: no blank first message (a question starts it),
 urgency (the clock), and nobody exposed (unmasking takes two yeses, and nobody learns who said no).
 
 Code: rules and questions `src/lib/masquerade.ts`; server `src/app/api/masquerade/route.ts`;
-screens `src/app/play/masquerade.tsx`; database `game-db/131_masquerade.sql` (tests:
+screens `src/app/play/masquerade.tsx`, the pop-up `src/app/play/masq-invite.tsx` (the switch and
+your choices: `masq-open.ts`); database `game-db/131_masquerade.sql` (tests:
 `game-db/tests/masquerade.test.sql`, `src/lib/tests/masquerade.test.ts`).
 
 ## Where
 
 - **The map**: the mask button, top right beside Play (the games).
-- **Lite**: the Masquerade card at the top of Chats (how many are masked right now).
+- **Lite**: the Masquerade card at the top of Chats (how many are masked right now; it says so
+  when you're open to it).
 - **Everywhere**: Masquerade in the menu (your face, People).
 - **The walkthrough** has a card on it (and players who'd finished it see it once as what's new).
 
@@ -32,6 +34,7 @@ screens `src/app/play/masquerade.tsx`; database `game-db/131_masquerade.sql` (te
    fit who they asked for. Not someone either of you blocked, not someone you met in a masquerade
    in the last day, never someone either of you reported in one. Waiting phones ask every 3
    seconds (that keeps their place and tries again); a place unused for 2 minutes goes.
+   If nobody fitting is waiting, someone **Open to Masquerade** who fits is asked instead (below).
 3. **The masked chat (5 minutes)**: "Masked guest", their area, and why they're here. A question
    to start; **Another question** for a new one (both phones show it). Before unmasking, no phone
    numbers, links or social handles (`masqBlocked`). The flag: **Leave**, or **Report and leave**.
@@ -39,6 +42,27 @@ screens `src/app/play/masquerade.tsx`; database `game-db/131_masquerade.sql` (te
    decide; nobody deciding ends it.
 5. **Both unmasked**: both faces, their name, **Keep chatting** (the ordinary chat), **Add friend**,
    **Go again**. Otherwise: "Not a match this time" (a pass never says who).
+
+## Open to Masquerade
+
+So only one person has to start. **Open to Masquerade** (the switch on Masquerade's first page)
+stays on while you carry on playing or chatting, in the world or in Lite. Someone masks up, nobody
+fitting is waiting, and you fit what they asked for (and they fit you, the same rules as above):
+
+> 🎭 **A masked guest wants to talk** · Lekki · Friends · 🌶️🌶️ · **Not now** / **Accept (20s)**
+
+- **Accept**: straight into the masquerade (they waited, so they're "a").
+- **Not now**, or 20 seconds without an answer: the next person open to it is asked. You aren't
+  asked again for 5 minutes, and nobody asks the same person twice in a day.
+- **Stop these pop-ups** switches it off.
+- One pop-up at a time each; nearest first. Not someone masked up themselves or already in one.
+- While it's on, the phone says so once a minute (and when your choices change), only while the
+  game is open on screen; 150 seconds without and you're not asked. The server tells the phone at
+  once on its own live channel (`masqopen:<token>`, the token told only to that phone), so there's
+  no asking every few seconds. The pop-up shows the area, why they're here and how spicy they
+  picked; never a name or a face.
+- It uses your choices from Masquerade's first page (what you're here for, who you'd like to meet,
+  aged, how spicy). Dating and link-ups need Open to dating, as always.
 
 ## Questions and spice
 
