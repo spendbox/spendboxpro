@@ -8430,6 +8430,10 @@ export function CityView({
   }, [businesses]);
   useEffect(() => {
     if (centerRef) centerRef.current = () => api.current?.center() ?? { x: 0, z: 0 };
+    // Gone with the map (Lite then knows where you are some other way).
+    return () => {
+      if (centerRef) centerRef.current = null;
+    };
   }, [centerRef]);
 
   const friendsKey = (friendsAt ?? []).map((f) => `${f.id}@${f.room}|${f.name}|${JSON.stringify(f.avatar)}`).join(";");

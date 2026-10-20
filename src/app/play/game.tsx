@@ -1075,7 +1075,14 @@ export function Game({
         onFly={(x, z) => {
           setStatsOpen(false);
           setChatOpen(false);
-          leaveThen.current("meet them", () => worldLife.fly(x, z));
+          // Lite: Meet opens the 3D map (it flies there as soon as the map is up, and looks again
+          // a moment later in case the map took a while to load on this phone).
+          const fromLite = lite;
+          leaveLite();
+          leaveThen.current("meet them", () => {
+            worldLife.fly(x, z);
+            if (fromLite) setTimeout(() => worldLife.lookAt(x, z), 2500);
+          });
         }}
       />
     ) : undefined;
