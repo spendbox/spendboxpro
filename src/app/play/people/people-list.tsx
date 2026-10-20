@@ -74,6 +74,8 @@ export function PeopleList({
   onFly,
   compact,
   onlineOnly,
+  roomy,
+  action = "Message",
 }: {
   region: string;
   /** Where the map is looking (tiles): the nearest people to here come first. */
@@ -85,8 +87,13 @@ export function PeopleList({
   compact?: boolean;
   /** Only the people online right now (searching a name still finds anyone). */
   onlineOnly?: boolean;
+  /** Lite (docs/LITE.md): big rows and buttons, and Everyone / Online / Friends to narrow it. */
+  roomy?: boolean;
+  /** The button on each row (onMessage): "Message", or "Send" when picking who to send money to. */
+  action?: string;
 }) {
   const [q, setQ] = useState("");
+  const [only, setOnly] = useState<"all" | "online" | "friends">("all");
   // The last list (kept for the visit): shown at once when it opens again, then brought up to date.
   const [list, setList] = useState<FoundPerson[] | null>(() => lastList.get(region) ?? null);
   // Search as you type (a moment after the last key), nearest first.
@@ -113,7 +120,68 @@ export function PeopleList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [region, q]);
   const online = list?.filter((p) => p.online).length ?? 0;
-  const shown = onlineOnly && !q ? (list?.filter((p) => p.online) ?? null) : list;
+  const narrowed = roomy && list ? list.filter((p) => (only === "online" ? p.online : only === "friends" ? p.friend : true)) : list;
+  const shown = onlineOnly && !q ? (narrowed?.filter((p) => p.online) ?? null) : narrowed;
+  if (roomy)
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="relative px-5 pb-3">
+          <Search className="absolute left-9 top-[1.5rem] size-5 -translate-y-1/2 text-muted" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find anyone"
+            aria-label="Find anyone by name"
+            className="h-12 w-full rounded-2xl bg-panel-2 pl-12 pr-12 text-base outline-none ring-ink/20 focus:ring-2"
+          />
+          {q && (
+            <button onClick={() => setQ("")} className="absolute right-6 top-[1.5rem] grid size-10 -translate-y-1/2 place-items-center rounded-full" aria-label="Clear">
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex gap-2 px-5 pb-3" role="tablist" aria-label="Who to show">
+          {(
+            [
+              ["all", "Everyone"],
+              ["online", "Online"],
+              ["friends", "Friends"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={only === id} onClick={() => setOnly(id)} className={cn("h-10 rounded-full px-4 text-sm font-bold", only === id ? "bg-ink text-white" : "bg-panel-2 text-ink")}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4">
+          {shown === null &&
+            [0, 1, 2, 3, 4].map((i) => (
+              <li key={i} className="mx-2 my-2 h-14 animate-pulse rounded-2xl bg-ink/5" />
+            ))}
+          {shown?.length === 0 && (
+            <li className="p-8 text-center text-sm text-muted">{q ? `Nobody called "${q}".` : only === "friends" ? "No friends here yet. Tap a face to add one." : only === "online" ? "Nobody else is online right now." : "Nobody else lives here yet. Invite a friend!"}</li>
+          )}
+          {shown?.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 rounded-2xl px-2 py-2.5">
+              <button onClick={() => onPerson(p.id)} className="relative shrink-0" aria-label={`${p.name}'s card`}>
+                <AvatarFace avatar={cleanAvatar(p.avatar, p.name)} size={52} className="rounded-full" />
+                {p.online && <span className="absolute bottom-0 right-0 size-3.5 rounded-full bg-[#2f9e44] ring-2 ring-panel" aria-label="online" />}
+              </button>
+              <button onClick={() => onPerson(p.id)} className="min-w-0 flex-1 text-left">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <b className="truncate text-base">{p.name}</b>
+                  {p.friend && <span className="shrink-0 rounded-full bg-me/10 px-2 text-[11px] font-semibold text-me">Friend</span>}
+                </span>
+                <span className="block truncate text-sm text-muted">{[p.online ? "Online" : "Offline", farIn(p.dist)].filter(Boolean).join(" · ")}</span>
+              </button>
+              <button onClick={() => onMessage({ id: p.id, name: p.name })} className="h-11 shrink-0 rounded-2xl bg-panel-2 px-4 text-sm font-extrabold">
+                Message
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn("relative", compact ? "p-2" : "pb-2")}>
@@ -166,7 +234,7 @@ export function PeopleList({
               </button>
             )}
             <button onClick={() => onMessage({ id: p.id, name: p.name })} className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-ink px-3 text-xs font-semibold text-white">
-              <MessageCircle className="size-3.5" /> Message
+              <MessageCircle className="size-3.5" /> {action}
             </button>
           </li>
         ))}

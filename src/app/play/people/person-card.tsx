@@ -16,6 +16,7 @@ import { cachedCard, cardPreview, forgetCard, loadCard } from "./card-cache";
 import { Sheet } from "../sheet";
 import type { Prices } from "@/lib/world/region";
 import { DatingRow, StreetRow } from "./street-dating";
+import { PostsGrid, useProfilePosts } from "./profile-posts";
 
 // Anyone's card on the real map (docs/PEOPLE.md): who they are (with Add friend by their name),
 // Message and Give money up top, Hug / Shake / Report, a game against them (coming soon), where
@@ -174,6 +175,8 @@ export function PersonCard({
           <button onClick={onClose} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-ink/5 hover:bg-ink/10" aria-label="Close">
             <X className="size-4" />
           </button>
+          {/* A few words they wrote about themselves (game-db/130). */}
+          {card.about && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed">{card.about}</p>}
 
           {/* The main things to do: big and obvious. */}
           {canAct && (onMessage || onGive) && (
@@ -234,6 +237,9 @@ export function PersonCard({
             {card.friends.length > 0 && <li className="text-xs text-muted">Friends with {card.friends.map((f) => f.name).join(", ")}</li>}
           </ul>
 
+          {/* Their photos (docs/LITE.md). */}
+          <CardPhotos id={card.id} self={!!self} />
+
           {/* Leave something at their door. */}
           {card.home && canAct && (
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -284,6 +290,13 @@ export function PersonCard({
       )}
     </Sheet>
   );
+}
+
+/** The photos on someone's profile, under what's known about them (nothing shown if there are none). */
+function CardPhotos({ id, self }: { id: string; self: boolean }) {
+  const { got, drop } = useProfilePosts(id);
+  if (got && !got.posts.length && !got.friendsOnly) return null;
+  return <PostsGrid got={got} mine={self} onDeleted={drop} className="-mx-1 mt-3 overflow-hidden rounded-2xl" />;
 }
 
 export function ago(ms: number) {

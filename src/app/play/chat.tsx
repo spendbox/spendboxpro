@@ -17,7 +17,7 @@ import { BotCard } from "./bot-card";
 import { loadDms, loadRoom, sendLocation, sendMessage, sendPhoto, sendVoice, voiceUrl, type ChatMessage, type ChatTarget } from "./chat-actions";
 import { locationIn, withoutTag, type ChatLocation } from "@/lib/chat-location";
 import { cash } from "@/lib/world/value";
-import { ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
+import { asJpeg, ChatPhoto, PhotoPicker, type PhotoPick } from "./chat-photo";
 import { NpcBadge, NpcCard, NpcFace } from "./npc-card";
 import { closePhoneNotices } from "./phone/phone-notices";
 import { useTutorialGlow } from "./tutorial";
@@ -199,6 +199,7 @@ export function Chat({
   onGoTo,
   onLocation,
   myLocation,
+  lite,
 }: {
   meId: string;
   meRole: "hider" | "seeker" | null;
@@ -260,6 +261,12 @@ export function Chat({
   /** "Take a selfie" in the picture menu: the game's camera, sending the picture here. */
   onSelfie?: (target: ChatTarget, to: string) => void;
   /**
+   * Lite mode (docs/LITE.md): your chats fill the screen between Lite's title (top, px) and its
+   * tabs (bottom, px), with no handle or close button; a conversation covers the whole screen.
+   * `newChat` changing opens New chat.
+   */
+  lite?: { top: number; bottom: number; newChat: number };
+  /**
    * The real map: Newtown's own chat (pinned on top): your notices as messages. `request`
    * changing opens it; onSeen when it's open (they're read).
    */
@@ -294,6 +301,15 @@ export function Chat({
     if (open && keep && !thread) setTab("private");
     if (!open) setNewtownOpen(false);
     else if (open && !room && finder && tab === "here") setTab("people");
+  }
+  // Lite's "new chat" button.
+  const liteNewChat = lite?.newChat ?? 0;
+  const [newChatSeen, setNewChatSeen] = useState(liteNewChat);
+  if (liteNewChat !== newChatSeen) {
+    setNewChatSeen(liteNewChat);
+    setThreadNow(null);
+    setNewtownOpen(false);
+    setTab("people");
   }
   // What you've read in each conversation (the newest message id), kept on this phone too, so
   // read messages never count again after the game reloads.
@@ -790,7 +806,12 @@ export function Chat({
   // Where the sheet sits on a phone: its bottom on the keyboard (or the bottom of the screen).
   // Half the screen (or nearly all of it when made bigger); while typing, all the space above the keyboard.
   let sheetStyle: React.CSSProperties | undefined;
-  if (box) {
+  // Lite: a conversation (or Newtown's) covers the screen, above the keyboard; your chats sit between Lite's title and tabs.
+  const liteFull = !!lite && (!!thread || newtownOpen);
+  if (lite) {
+    if (liteFull) sheetStyle = box ? { top: box.top, height: box.height } : { top: 0, bottom: 0 };
+    else sheetStyle = box?.keyboard ? { top: lite.top, height: Math.max(120, box.top + box.height - lite.top) } : { top: lite.top, bottom: lite.bottom };
+  } else if (box) {
     const h = Math.round(box.keyboard ? box.height : Math.min((expanded ? 0.9 : 0.5) * box.full, box.height));
     sheetStyle = { top: box.top + box.height - h, height: h };
   }
@@ -889,9 +910,13 @@ export function Chat({
     <section
       aria-label="Chat"
       className={cn(
-        "pointer-events-auto fixed inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl bg-panel shadow-[0_-8px_40px_-12px_rgb(24_32_43/0.35)]",
-        "sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-96 sm:rounded-3xl",
-        expanded ? "h-[90dvh] sm:h-[calc(100dvh-2rem)]" : "h-[50dvh] sm:h-[min(640px,calc(100dvh-7rem))]",
+        lite
+          ? "pointer-events-auto fixed inset-x-0 mx-auto flex w-full max-w-xl flex-col overflow-hidden bg-panel"
+          : cn(
+              "pointer-events-auto fixed inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-3xl bg-panel shadow-[0_-8px_40px_-12px_rgb(24_32_43/0.35)]",
+              "sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-96 sm:rounded-3xl",
+              expanded ? "h-[90dvh] sm:h-[calc(100dvh-2rem)]" : "h-[50dvh] sm:h-[min(640px,calc(100dvh-7rem))]",
+            ),
       )}
       style={{ ...sheetStyle, zIndex: layer }}
     >
@@ -920,12 +945,19 @@ export function Chat({
           if (dragged.current) dragged.current = false;
           else setExpanded((v) => !v);
         }}
-        className="flex w-full shrink-0 touch-none justify-center pb-1 pt-2 sm:hidden"
+        className={cn("flex w-full shrink-0 touch-none justify-center pb-1 pt-2 sm:hidden", lite && "hidden")}
       >
         <span className="h-1.5 w-10 rounded-full bg-line" />
       </button>
 
-      <header className="flex shrink-0 items-center gap-1.5 border-b border-line px-3 pb-2 sm:pt-2.5">
+      <header
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 border-b border-line px-3 pb-2 sm:pt-2.5",
+          lite && "min-h-16 pt-[max(0.5rem,env(safe-area-inset-top))]",
+          // Lite's own title says "Chats": the list needs no header of its own (New chat keeps its Back).
+          lite && !liteFull && tab !== "people" && "hidden",
+        )}
+      >
         {newtownOpen && !thread && keep ? (
           <>
             <button onClick={() => setNewtownOpen(false)} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Back to your chats">
@@ -1025,16 +1057,20 @@ export function Chat({
             ))}
           </div>
         )}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2"
-          aria-label={expanded ? "Make the chat smaller" : "Make the chat bigger"}
-        >
-          {expanded ? <ChevronDown className="size-5" aria-hidden /> : <ChevronUp className="size-5" aria-hidden />}
-        </button>
-        <button onClick={close} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close chat">
-          <X className="size-5" aria-hidden />
-        </button>
+        {!lite && (
+          <>
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2"
+              aria-label={expanded ? "Make the chat smaller" : "Make the chat bigger"}
+            >
+              {expanded ? <ChevronDown className="size-5" aria-hidden /> : <ChevronUp className="size-5" aria-hidden />}
+            </button>
+            <button onClick={close} className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-panel-2" aria-label="Close chat">
+              <X className="size-5" aria-hidden />
+            </button>
+          </>
+        )}
       </header>
 
       {guest ? (
@@ -1296,7 +1332,8 @@ export function Chat({
               onSend={send}
               onAudio={sendAudio}
               onPicture={sendPicture}
-              onSelfie={selfieHere}
+              onSelfie={lite ? undefined : selfieHere}
+              nativeCamera={!!lite}
               onLocation={thread && keep ? sendWhereIAm : undefined}
               placeholder={keep ? "Send a chat" : thread ? `Private message to ${thread.name}` : `Message ${room ? placeTitle(room) : "everyone here"}`}
             />
@@ -1869,8 +1906,11 @@ function Composer({
   onLocation,
   placeholder,
   snap = false,
+  nativeCamera = false,
 }: {
   snap?: boolean;
+  /** Lite (docs/LITE.md): the camera button takes a selfie with the phone's own camera and sends it. */
+  nativeCamera?: boolean;
   /** Send where you are (private chats). */
   onLocation?: () => Promise<void>;
   onSend: (text: string) => Promise<boolean>;
@@ -1882,6 +1922,19 @@ function Composer({
   const [text, setText] = useState("");
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const selfieInput = useRef<HTMLInputElement>(null);
+  const [selfieError, setSelfieError] = useState<string | null>(null);
+  const sendSelfie = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setSelfieError(null);
+    setBusy(true);
+    const jpeg = await asJpeg(f);
+    if (jpeg) await onPicture({ image: jpeg });
+    else setSelfieError("That picture couldn't be used. Try again.");
+    setBusy(false);
+  };
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
@@ -1942,8 +1995,11 @@ function Composer({
 
   return (
     <div className="shrink-0 border-t border-line p-2.5">
+      {nativeCamera && <input ref={selfieInput} type="file" accept="image/*" capture="user" className="hidden" onChange={sendSelfie} />}
+      {selfieError && <p className="mb-1.5 px-1 text-xs text-hit">{selfieError}</p>}
       {picking && (
         <PhotoPicker
+          native={nativeCamera}
           onClose={() => setPicking(false)}
           onSelfie={
             onSelfie &&
@@ -1978,7 +2034,7 @@ function Composer({
           <form onSubmit={submit} className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => (onSelfie ? onSelfie() : setPicking((v) => !v))}
+              onClick={() => (nativeCamera ? selfieInput.current?.click() : onSelfie ? onSelfie() : setPicking((v) => !v))}
               disabled={busy}
               className="grid size-10 shrink-0 place-items-center rounded-full bg-panel-2 text-ink"
               aria-label="Take a selfie and send it"
