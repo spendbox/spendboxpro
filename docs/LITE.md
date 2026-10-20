@@ -24,7 +24,7 @@ Code: `src/app/play/lite/`, wired in `src/app/play/game.tsx` (look for "Lite").
 - In Lite: the globe at the top of every page opens the World.
 - The phone remembers which (`nt-lite` in its storage, `lite/lite-pref.ts`). `?lite=1` or `?lite=0`
   in the address picks one (and is remembered). Guests (not signed in) always see the world.
-- Anything that needs the map takes you to the World first: Go there on a shared location, Show on
+- Anything that needs the map takes you to the World first: Meet (in New chat), Go there on a shared location, Show on
   someone's card, Home and Leave a mark in the menu, Choose on the map while hosting a party.
 
 ## The pages
