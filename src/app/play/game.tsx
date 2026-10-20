@@ -220,6 +220,7 @@ const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.Avata
 const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.AvatarStudio), { ssr: false });
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
+const LiteCamera = dynamic(() => import("./lite/lite-camera").then((m) => m.LiteCamera));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
 const TripLayer = dynamic(() => import("./trip/trip-layer").then((m) => m.TripLayer), { ssr: false });
 const MomentsLayer = dynamic(() => import("./moments/moments-layer").then((m) => m.MomentsLayer), { ssr: false });
@@ -631,6 +632,8 @@ export function Game({
   const [liteProfile, setLiteProfile] = useState(false);
   const [liteSend, setLiteSend] = useState(false);
   const [liteOffer, setLiteOffer] = useState(false);
+  /** Lite's camera: the phone's own (there's no town for the game's camera to take). */
+  const [liteCamera, setLiteCamera] = useState(false);
   /** What's on (from Events, for Lite's own list), going into one, and hosting one kind. */
   const [eventList, setEventList] = useState<EventView[]>([]);
   const [eventGoIn, setEventGoIn] = useState<{ id: number; at: number } | null>(null);
@@ -3148,7 +3151,7 @@ export function Game({
         />
       )}
       {!guest && playCtx.roomId && !gamesOpen && <MinigameInvites ctx={playCtx} onAccept={(def, invite) => setGamesOpen({ game: def.id, invite })} />}
-      {camera && (round || worldId) && (
+      {camera && (round || worldId) && !lite && (
         <CameraMode
           key={camera}
           avatar={me.avatar}
@@ -3188,7 +3191,11 @@ export function Game({
           guest={guest}
           initialScreen={phone}
           onClose={() => setPhone(null)}
-          onCamera={(kind) => { setPhone(null); if (round || worldId) setCamera(kind); }}
+          onCamera={(kind) => {
+            setPhone(null);
+            if (lite) setLiteCamera(true);
+            else if (round || worldId) setCamera(kind);
+          }}
           onSignIn={() => { setPhone(null); setSignIn({ why: "Sign in to keep your pictures. Your gallery goes with you to every town." }); }}
         />
       )}
@@ -4464,6 +4471,7 @@ export function Game({
             }}
             myLocation={() => (walking && worldId ? { region: worldId, ...(worldLife.centerRef.current?.() ?? { x: NaN, z: NaN }) } : null)}
             onCamera={() => {
+              if (lite) return setLiteCamera(true);
               setChatOpen(false);
               setCamera("photo");
             }}
@@ -4690,6 +4698,15 @@ export function Game({
             />
           </div>
         </Sheet>
+      )}
+      {lite && liteCamera && worldId && (
+        <LiteCamera
+          region={worldId}
+          city={worldRegion?.name ?? null}
+          centre={() => worldLife.mySpot ?? worldLife.homeSpot ?? { x: 0, z: 0 }}
+          onClose={() => setLiteCamera(false)}
+          onMessage={(text, ok) => setMessage({ text, tone: ok ? "good" : "bad" })}
+        />
       )}
       {/* The world's way to Lite: a pill above the Town Hall, and once, a note offering it. */}
       {worldId && !guest && !lite && !camera && !place && ride === null && (

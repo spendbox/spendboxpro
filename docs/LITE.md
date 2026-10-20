@@ -49,6 +49,12 @@ People, Wallet. Buttons are 44 px or more, one main colour (purple) for the main
   reputation, friends, things; Edit profile and Post a photo; your photos (or your things). ☰ opens
   the game's menu (home, doorstep, friends, notifications, sign out...).
 
+- **Pictures** (`lite/lite-camera.tsx`): the game's camera takes pictures of the town, and Lite has
+  no town, so Lite uses the phone's own camera. In a conversation the camera button takes a selfie
+  and sends it; the picture button offers Take a photo, Take a selfie and From your phone. "Take a
+  picture or a selfie" (under your chats) and the camera in Photos: a photo, a selfie or one from
+  the phone, then Send to someone, Save to my photos or Post to my profile.
+
 Invitations, game tables, party rooms, gifts and the daily gift pop up over Lite exactly as in the
 world.
 

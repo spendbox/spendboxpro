@@ -57,7 +57,8 @@ export function ChatPhoto({ id, mine }: { id: number; mine: boolean }) {
 }
 
 /** A picture from this phone, made a small JPEG (at most 1,600 px across), or null if it isn't a picture. */
-async function asJpeg(f: File): Promise<Blob | null> {
+/** A picture from the phone as a JPEG small enough to send (at most 1600 px across). */
+export async function asJpeg(f: File): Promise<Blob | null> {
   try {
     const bmp = await createImageBitmap(f);
     const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
@@ -78,11 +79,26 @@ async function asJpeg(f: File): Promise<Blob | null> {
 
 export type PhotoPick = { image: Blob } | { galleryId: number };
 
-/** The picture button's menu: a selfie now, a picture from your gallery, or one from this phone. */
-export function PhotoPicker({ onPick, onSelfie, onClose }: { onPick: (p: PhotoPick) => void; onSelfie?: () => void; onClose: () => void }) {
+/**
+ * The picture button's menu: a selfie now, a picture from your gallery, or one from this phone.
+ * `native` (Lite, docs/LITE.md): the phone's own camera takes the photo or selfie (there's no town
+ * for the game's camera to take).
+ */
+export function PhotoPicker({ onPick, onSelfie, onClose, native }: { onPick: (p: PhotoPick) => void; onSelfie?: () => void; onClose: () => void; native?: boolean }) {
   const { photos, loading } = useGallery();
   const [error, setError] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  const back = useRef<HTMLInputElement>(null);
+  const front = useRef<HTMLInputElement>(null);
+  const picked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    setError(null);
+    const jpeg = await asJpeg(f);
+    if (!jpeg) return setError("That picture couldn't be used. Try another one.");
+    onPick({ image: jpeg });
+  };
   useEffect(() => {
     void loadGallery();
   }, []);
@@ -95,6 +111,21 @@ export function PhotoPicker({ onPick, onSelfie, onClose }: { onPick: (p: PhotoPi
           <X className="size-4" />
         </button>
       </div>
+      {native ? (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => back.current?.click()} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7048e8] text-sm font-bold text-white">
+            <Camera className="size-5" /> Take a photo
+          </button>
+          <button onClick={() => front.current?.click()} className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#7048e8] text-sm font-bold text-white">
+            <User className="size-5" /> Take a selfie
+          </button>
+          <button onClick={() => file.current?.click()} className="col-span-2 flex h-12 items-center justify-center gap-2 rounded-2xl bg-panel-2 text-sm font-bold">
+            <ImageIcon className="size-5" /> From your phone
+          </button>
+          <input ref={back} type="file" accept="image/*" capture="environment" className="hidden" onChange={picked} />
+          <input ref={front} type="file" accept="image/*" capture="user" className="hidden" onChange={picked} />
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-2">
         {onSelfie && (
           <button onClick={onSelfie} className="flex items-center justify-center gap-1.5 rounded-xl bg-[#7048e8] px-3 py-2.5 text-sm font-semibold text-white">
@@ -105,21 +136,8 @@ export function PhotoPicker({ onPick, onSelfie, onClose }: { onPick: (p: PhotoPi
           <Camera className="size-4" /> From your phone
         </button>
       </div>
-      <input
-        ref={file}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (!f) return;
-          setError(null);
-          const jpeg = await asJpeg(f);
-          if (!jpeg) return setError("That picture couldn't be used. Try another one.");
-          onPick({ image: jpeg });
-        }}
-      />
+      )}
+      <input ref={file} type="file" accept="image/*" className="hidden" onChange={picked} />
       <p className="mb-1 mt-2.5 flex items-center gap-1 text-[11px] font-semibold text-muted">
         <ImageIcon className="size-3.5" /> Your gallery
       </p>
