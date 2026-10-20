@@ -6,7 +6,7 @@ import { X } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import type { ProfilePost } from "@/app/api/profile-posts/route";
 import { shrinkPhoto } from "../events/room-kit";
-import { OnTop } from "../on-top";
+import { OnTopPage } from "../on-top";
 
 // Photos on a profile (src/app/api/profile-posts, game-db/130): a grid on anyone's card and on your
 // own profile, a photo full screen when tapped (yours with Delete), and posting one of your own.
@@ -95,7 +95,7 @@ function PhotoView({ post, mine, onClose, onDeleted }: { post: ProfilePost; mine
     else setError(r.error ?? "That didn't work. Try again.");
   };
   return (
-    <OnTop role="dialog" aria-modal="true" aria-label="Photo" className="fixed inset-0 flex flex-col bg-black/95 text-white">
+    <OnTopPage role="dialog" aria-modal="true" aria-label="Photo" className="fixed inset-0 flex flex-col bg-black/95 text-white">
       <div className="flex items-center justify-end gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         {mine && (
           <button disabled={busy} onClick={() => void remove()} className="flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold disabled:opacity-50">
@@ -114,7 +114,7 @@ function PhotoView({ post, mine, onClose, onDeleted }: { post: ProfilePost; mine
         {post.caption && <p className="text-base">{post.caption}</p>}
         {error && <p className="mt-1 text-sm text-[#ffa8a8]">{error}</p>}
       </div>
-    </OnTop>
+    </OnTopPage>
   );
 }
 
@@ -135,7 +135,7 @@ export function PostPhotoSheet({ onClose, onPosted, onMessage }: { onClose: () =
     input.current?.click();
   }, [input]);
   return (
-    <OnTop role="dialog" aria-modal="true" aria-label="Post a photo" className="fixed inset-0 flex flex-col bg-white text-ink">
+    <OnTopPage role="dialog" aria-modal="true" aria-label="Post a photo" className="fixed inset-0 flex flex-col bg-white text-ink">
       <header className="flex items-center gap-2 border-b border-line p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button onClick={onClose} className="grid size-11 place-items-center rounded-full" aria-label="Close">
           <X className="size-5" />
@@ -175,6 +175,6 @@ export function PostPhotoSheet({ onClose, onPosted, onMessage }: { onClose: () =
           {busy ? "Posting…" : "Post"}
         </button>
       </div>
-    </OnTop>
+    </OnTopPage>
   );
 }

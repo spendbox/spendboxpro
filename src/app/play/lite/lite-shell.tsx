@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, Globe, MessageCircle, SquarePen, Users, Wallet } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import type { Avatar } from "@/lib/avatar";
@@ -112,7 +113,9 @@ export function LiteShell({
         </div>
       </nav>
 
-      {message && (
+      {/* On the page itself, so it shows over the chats too (they're drawn there, above the game's layer). */}
+      {message &&
+        createPortal(
         <div className="pointer-events-none fixed inset-x-0 z-[1000] flex justify-center px-4" style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}>
           <p
             role="status"
@@ -125,8 +128,9 @@ export function LiteShell({
           >
             {message.text}
           </p>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { addShot } from "../phone/gallery";
 import { usePostPhoto } from "../people/profile-posts";
 import { cardPreview } from "../people/card-cache";
 import { PeopleList } from "../people/people-list";
-import { OnTop } from "../on-top";
+import { OnTopPage } from "../on-top";
 import { Sheet } from "../sheet";
 
 // Lite's camera (docs/LITE.md): there's no town for the game's camera to take, so the phone's own
@@ -124,7 +124,7 @@ export function LiteCamera({
     );
 
   return (
-    <OnTop role="dialog" aria-modal="true" aria-label="Your picture" className="fixed inset-0 flex flex-col bg-black text-white">
+    <OnTopPage role="dialog" aria-modal="true" aria-label="Your picture" className="fixed inset-0 flex flex-col bg-black text-white">
       {inputs}
       <div className="flex items-center justify-between p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <button onClick={() => setPic(null)} className="h-11 rounded-full bg-white/10 px-4 text-sm font-bold">
@@ -164,6 +164,6 @@ export function LiteCamera({
           </div>
         </Sheet>
       )}
-    </OnTop>
+    </OnTopPage>
   );
 }

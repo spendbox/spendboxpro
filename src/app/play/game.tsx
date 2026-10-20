@@ -4470,11 +4470,15 @@ export function Game({
               setLocPop({ ...p, at: Date.now() });
             }}
             myLocation={() => (walking && worldId ? { region: worldId, ...(worldLife.centerRef.current?.() ?? { x: NaN, z: NaN }) } : null)}
-            onCamera={() => {
-              if (lite) return setLiteCamera(true);
-              setChatOpen(false);
-              setCamera("photo");
-            }}
+            // Lite: no camera button under your chats (pictures are taken in a conversation, or in Photos).
+            onCamera={
+              lite
+                ? undefined
+                : () => {
+                    setChatOpen(false);
+                    setCamera("photo");
+                  }
+            }
             onSelfie={(target, to) => {
               setSelfieTo({ target, to });
               setChatOpen(false);

@@ -11,7 +11,7 @@ import type { PlayerCardData } from "../people-actions";
 import { cachedCard, forgetCard, loadCard } from "../people/card-cache";
 import { PostPhotoSheet, PostsGrid, useProfilePosts } from "../people/profile-posts";
 import { saveAbout } from "../profile-actions";
-import { OnTop } from "../on-top";
+import { OnTopPage } from "../on-top";
 
 // Your profile in Lite (docs/LITE.md): your photo, name, a few words about you, your numbers,
 // Edit profile and Post a photo, then your photos (or your things). The ☰ holds everything else
@@ -60,7 +60,7 @@ export function LiteProfile({
     ["Things", card ? String(card.things) : "–"],
   ];
   return (
-    <OnTop role="dialog" aria-modal="true" aria-label="Your profile" className="fixed inset-0 overflow-y-auto overscroll-contain bg-white text-ink">
+    <OnTopPage role="dialog" aria-modal="true" aria-label="Your profile" className="fixed inset-0 overflow-y-auto overscroll-contain bg-white text-ink">
       <div className="mx-auto w-full max-w-xl pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <header className="flex items-center gap-2 px-2 pb-1 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <button onClick={onClose} className="grid size-11 place-items-center rounded-full" aria-label="Back">
@@ -161,7 +161,7 @@ export function LiteProfile({
         />
       )}
       {posting && <PostPhotoSheet onClose={() => setPosting(false)} onPosted={add} onMessage={onMessage} />}
-    </OnTop>
+    </OnTopPage>
   );
 }
 
@@ -193,7 +193,7 @@ function EditProfile({
     else onMessage(r.error, false);
   };
   return (
-    <OnTop role="dialog" aria-modal="true" aria-label="Edit profile" className="fixed inset-0 flex flex-col bg-white text-ink">
+    <OnTopPage role="dialog" aria-modal="true" aria-label="Edit profile" className="fixed inset-0 flex flex-col bg-white text-ink">
       <div className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col">
         <header className="flex items-center gap-2 px-2 pb-2 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <button onClick={onClose} className="grid size-11 place-items-center rounded-full" aria-label="Back">
@@ -254,6 +254,6 @@ function EditProfile({
           </button>
         </div>
       </div>
-    </OnTop>
+    </OnTopPage>
   );
 }
