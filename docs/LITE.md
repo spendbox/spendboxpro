@@ -32,6 +32,7 @@ Code: `src/app/play/lite/`, wired in `src/app/play/game.tsx` (look for "Lite").
 A big title, then (right) the globe and your face; four tabs at the bottom: Chats, Events,
 People, Wallet. Buttons are 44 px or more, one main colour (purple) for the main button.
 
+- **Masquerade** (docs/MASQUERADE.md): its card sits at the top of Chats.
 - **Chats**: the game's own chat (`chat.tsx`, its `lite` prop) filling the page: online now,
   Newtown, Newtown News, your chats. A conversation covers the whole screen; Play and Give are at
   its top. The pencil (top) is New chat.

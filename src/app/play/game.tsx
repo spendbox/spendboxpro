@@ -67,6 +67,7 @@ import { claimWorldEvent, joinRound, type ActionResult } from "./actions";
 import { liveLabel, SPORTS } from "@/lib/sports/schedule";
 import { DEFAULT_RULES, type BoardGhost, type DuelView } from "@/lib/ghost-duels";
 import { Church, Crosshair, FerrisWheel, Landmark as LandmarkIcon, Plane, Ship, TrainFront, Trophy, UtensilsCrossed } from "lucide-react";
+import { Drama } from "lucide-react";
 import { BellOff, BellRing, Landmark, LayoutGrid, PartyPopper, LocateFixed, Rocket, Wallet, PenLine, Compass, Orbit, Crown, Eye, EyeOff, Flag, Gem, Gift, ImageIcon, Palette, ShoppingBag, Swords, TrendingUp, User } from "lucide-react";
 import { ChallengePopup } from "./ghost-duel/challenge-popup";
 import { DuelStatus } from "./ghost-duel/duel-status";
@@ -220,6 +221,8 @@ const AvatarEditor = dynamic(() => import("./avatar-editor").then((m) => m.Avata
 const AvatarStudio = dynamic(() => import("./avatar-studio").then((m) => m.AvatarStudio), { ssr: false });
 const SportsSheet = dynamic(() => import("./sports/sportsbook").then((m) => m.SportsSheet));
 const ActivitySheet = dynamic(() => import("./activities/activity-sheet").then((m) => m.ActivitySheet));
+const Masquerade = dynamic(() => import("./masquerade").then((m) => m.Masquerade));
+const MasqueradeCard = dynamic(() => import("./masquerade").then((m) => m.MasqueradeCard));
 const LiteCamera = dynamic(() => import("./lite/lite-camera").then((m) => m.LiteCamera));
 const GiveCoinsSheet = dynamic(() => import("./activities/gift-sheet").then((m) => m.GiveCoinsSheet));
 const TripLayer = dynamic(() => import("./trip/trip-layer").then((m) => m.TripLayer), { ssr: false });
@@ -632,6 +635,8 @@ export function Game({
   const [liteProfile, setLiteProfile] = useState(false);
   const [liteSend, setLiteSend] = useState(false);
   const [liteOffer, setLiteOffer] = useState(false);
+  /** Masquerade (docs/MASQUERADE.md): 5 minutes masked with someone new. */
+  const [masqOpen, setMasqOpen] = useState(false);
   /** Lite's camera: the phone's own (there's no town for the game's camera to take). */
   const [liteCamera, setLiteCamera] = useState(false);
   /** What's on (from Events, for Lite's own list), going into one, and hosting one kind. */
@@ -4357,6 +4362,7 @@ export function Game({
                 { label: "Dating", icon: Heart, colour: "#c2255c", go: () => setSocialOpen("dating") },
                 { label: "Rivals", icon: Swords, colour: "#e8590c", go: () => setSocialOpen("rivals") },
                 { label: "Who's online", icon: Users, colour: "#2f9e44", go: () => setStatsOpen(true) },
+                { label: "Masquerade", icon: Drama, colour: "#5f3dc4", go: () => setMasqOpen(true) },
               ],
             },
             {
@@ -4610,7 +4616,10 @@ export function Game({
           onFrame={(top, bottom) => setLiteFrame((f) => (f.top === top && f.bottom === bottom ? f : { top, bottom }))}
           message={message ? { text: cashText(message.text), tone: message.tone } : null}
           above={
-            liteTab === "chats" && liteAd ? (
+            liteTab === "chats" ? (
+              <>
+              <MasqueradeCard onOpen={() => setMasqOpen(true)} />
+              {liteAd && (
               <button
                 onClick={() => void onBillboardTap({ id: liteAd.id, tile: 0, adId: liteAd.id })}
                 className="mx-5 mb-3 flex w-[calc(100%-2.5rem)] items-center gap-3 rounded-2xl px-3 py-2.5 text-left ring-1 ring-line"
@@ -4624,6 +4633,8 @@ export function Game({
                 </span>
                 <span className="shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold text-muted ring-1 ring-line">Ad</span>
               </button>
+              )}
+              </>
             ) : undefined
           }
         >
@@ -4709,6 +4720,20 @@ export function Game({
             />
           </div>
         </Sheet>
+      )}
+      {masqOpen && worldId && !guest && (
+        <Masquerade
+          me={{ name: me.name ?? "You", avatar: me.avatar }}
+          region={worldId}
+          where={() => worldLife.mySpot ?? worldLife.homeSpot ?? worldLife.centerRef.current?.() ?? null}
+          onClose={() => setMasqOpen(false)}
+          onChat={(p) => {
+            setMasqOpen(false);
+            chatWith(p);
+          }}
+          onAddFriend={(p) => void befriend(p)}
+          onDating={() => setSocialOpen("dating")}
+        />
       )}
       {lite && liteCamera && worldId && (
         <LiteCamera
