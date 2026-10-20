@@ -15,8 +15,10 @@ import {
   MASQ_MINUTES,
   MASQ_MORE_MINUTES,
   MASQ_SAY_MAX,
+  MASQ_MODES,
   MASQ_SPICE,
   masqBlocked,
+  masqNeedsDating,
   type MasqMode,
   type MasqQuestion,
   type MasqSpice,
@@ -26,6 +28,8 @@ import { setGender } from "./people-actions";
 import type { MasqIdle, MasqView } from "@/app/api/masquerade/route";
 import { whileHere } from "./activity";
 import { OnTopPage } from "./on-top";
+import { Mask } from "./masq-icon";
+export { Mask };
 
 // Masquerade (docs/MASQUERADE.md): 5 minutes of chat with someone new, both masked; names and faces
 // show only if both unmask. The server matches people and keeps the rules (src/app/api/masquerade);
@@ -35,16 +39,6 @@ const NIGHT = "#17112b";
 const PANEL = "#2b2050";
 const GOLD = "#ffc53d";
 
-/** A masquerade mask (yours gold, theirs pink). */
-export function Mask({ colour = GOLD, eyes = NIGHT, className }: { colour?: string; eyes?: string; className?: string }) {
-  return (
-    <svg viewBox="0 0 120 60" className={className} aria-hidden>
-      <path d="M8 14C28 3 50 8 60 18C70 8 92 3 112 14C114 36 101 51 82 49C70 48 64 39 60 34C56 39 50 48 38 49C19 51 6 36 8 14Z" fill={colour} />
-      <ellipse cx="37" cy="28" rx="12" ry="7" fill={eyes} />
-      <ellipse cx="83" cy="28" rx="12" ry="7" fill={eyes} />
-    </svg>
-  );
-}
 
 const api = (body: Record<string, unknown>) =>
   fetch("/api/masquerade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
@@ -196,11 +190,11 @@ export function Masquerade({
 
   const start = async () => {
     setError(null);
-    if (mode === "dating" && idle && !idle.datingOpen) {
+    if (masqNeedsDating(mode) && idle && !idle.datingOpen) {
       // Maybe just switched on (in Dating, over this page): look again first.
       const i = await idleNow();
       if (i) setIdle(i);
-      if (!i?.datingOpen) return setError("Switch on Open to dating first, or come for friends.");
+      if (!i?.datingOpen) return setError("Dating and spicy link-ups are for people open to dating. Switch it on first, or come for friends.");
     }
     setView(null);
     setWaiting(true);
@@ -307,10 +301,16 @@ function Start({
         </div>
 
         {label("I'm here for")}
-        {seg<MasqMode>(prefs.mode, [["friends", "Making friends"], ["dating", "Dating too"]], (mode) => setPrefs({ mode }))}
-        {prefs.mode === "dating" && idle && !idle.datingOpen && (
+        {seg<MasqMode>(
+          prefs.mode,
+          MASQ_MODES.map((m) => [m.mode, m.label]),
+          // A spicy link-up starts spicy (still your choice below).
+          (mode) => setPrefs(mode === "linkup" && prefs.spice < 2 ? { mode, spice: 3 } : { mode }),
+        )}
+        {prefs.mode === "linkup" && <p className="pt-2 text-[13px] leading-snug text-[#b9b0dc]">No-strings fun between adults, matched only with others here for the same. Be respectful: a no is a no.</p>}
+        {masqNeedsDating(prefs.mode) && idle && !idle.datingOpen && (
           <button onClick={onDating} className="mt-3 w-full rounded-2xl px-4 py-3 text-left text-sm text-[#e9e4fa]" style={{ background: PANEL }}>
-            Dating too matches you only with people open to dating. <b style={{ color: GOLD }}>Switch on Open to dating →</b>
+            This is for people open to dating. <b style={{ color: GOLD }}>Switch on Open to dating →</b>
           </button>
         )}
 
@@ -651,7 +651,7 @@ function Session({
         <div className="min-w-0 flex-1">
           <p className="text-[17px] font-extrabold">Masked guest</p>
           <p className="truncate text-[13px] text-[#b9b0dc]">
-            {[view.theirArea, view.mode === "dating" ? "open to dating" : "here for friends"].filter(Boolean).join(" · ")}
+            {[view.theirArea, MASQ_MODES.find((m) => m.mode === view.mode)?.line].filter(Boolean).join(" · ")}
           </p>
         </div>
         <span className={cn("rounded-[14px] px-3 py-2 text-base font-extrabold tabular-nums", low ? "bg-[#e03131] text-white" : "")} style={low ? undefined : { background: PANEL, color: GOLD }}>

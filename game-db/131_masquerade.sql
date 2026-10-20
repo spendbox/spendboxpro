@@ -12,13 +12,18 @@
 create table if not exists public.masq_queue (
   user_id uuid primary key references public.profiles (id) on delete cascade,
   region text not null,
-  mode text not null check (mode in ('friends', 'dating')),
+  mode text not null,
   x integer not null default 0,
   z integer not null default 0,
   area text,
   joined_at timestamptz not null default now(),
   seen_at timestamptz not null default now()
 );
+-- What they're here for: friends, dating, or a spicy link-up (dating and link-ups only for people
+-- open to dating). Set again here so running this part again brings older copies up to date.
+alter table public.masq_queue drop constraint if exists masq_queue_mode_check;
+alter table public.masq_queue add constraint masq_queue_mode_check check (mode in ('friends', 'dating', 'linkup'));
+
 -- Who they'd like to meet (men, women, anyone; aged from/to), how spicy they'd like the questions
 -- (0 mild to 3 extra spicy), and who they are (their sex and age when they joined).
 alter table public.masq_queue add column if not exists want text not null default 'anyone' check (want in ('men', 'women', 'anyone'));
@@ -34,7 +39,7 @@ create table if not exists public.masq_sessions (
   id bigserial primary key,
   a uuid not null references public.profiles (id) on delete cascade,
   b uuid not null references public.profiles (id) on delete cascade,
-  mode text not null check (mode in ('friends', 'dating')),
+  mode text not null,
   -- The live channel's secret part (only the two of them are told it).
   secret text not null,
   a_area text,
@@ -50,6 +55,9 @@ create table if not exists public.masq_sessions (
   ended_why text check (ended_why in ('pass', 'left', 'timeout', 'reported')),
   check (a <> b)
 );
+alter table public.masq_sessions drop constraint if exists masq_sessions_mode_check;
+alter table public.masq_sessions add constraint masq_sessions_mode_check check (mode in ('friends', 'dating', 'linkup'));
+
 -- How spicy each of them asked for (both see the other's; the questions follow the average).
 alter table public.masq_sessions add column if not exists a_spice integer not null default 1;
 alter table public.masq_sessions add column if not exists b_spice integer not null default 1;
@@ -99,7 +107,7 @@ declare
   v_max integer := greatest(18, least(coalesce(p_age_max, 99), 99));
   v_spice integer := greatest(0, least(coalesce(p_spice, 1), 3));
 begin
-  if p_mode not in ('friends', 'dating') then raise exception 'bad_mode'; end if;
+  if p_mode not in ('friends', 'dating', 'linkup') then raise exception 'bad_mode'; end if;
   if p_want not in ('men', 'women', 'anyone') then raise exception 'bad_want'; end if;
   if v_max < v_min then v_max := v_min; end if;
   select gender, extract(year from age(birth_date))::integer into v_gender, v_age from public.profiles where id = p_user;
@@ -112,7 +120,7 @@ begin
     delete from public.masq_queue where user_id = p_user;
     raise exception 'too_many';
   end if;
-  if p_mode = 'dating' and not coalesce((select dating_open from public.profiles where id = p_user), false) then
+  if p_mode in ('dating', 'linkup') and not coalesce((select dating_open from public.profiles where id = p_user), false) then
     raise exception 'dating_off';
   end if;
   delete from public.masq_queue where seen_at < now() - interval '2 minutes';

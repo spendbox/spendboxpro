@@ -59,7 +59,13 @@ People, Wallet. Buttons are 44 px or more, one main colour (purple) for the main
   (`OnTopPage`), so they open over the chats, which sit above the game's own layer.
 
 Invitations, game tables, party rooms, gifts and the daily gift pop up over Lite exactly as in the
-world.
+world. There's no Town Hall in Lite (nor its checks for new messages).
+
+The first time in Lite, four short cards say what's where (Lite, the tabs, Masquerade, the globe);
+once on each phone (`nt-lite-welcome`). The walkthrough in the world has a Lite card too.
+
+In a conversation (Lite and the world), Play, Give money, Hug, Shake hands and Report are under the
+**⋯** at the top, keeping the header clean.
 
 ## About you and photos (game-db/130)
 

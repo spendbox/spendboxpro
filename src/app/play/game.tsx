@@ -145,6 +145,7 @@ import { LiteProfile } from "./lite/lite-profile";
 import { liteOffered, liteServer, liteSnapshot, markLiteOffered, setLite as switchLite, subscribeLite, type LiteTab } from "./lite/lite-pref";
 import type { EventView } from "./events/event-actions";
 import { cardPreview } from "./people/card-cache";
+import { Mask } from "./masq-icon";
 import { SUPPORT_X, SUPPORT_X_URL } from "@/lib/brand";
 import { Fight, type ChallengeLight } from "./fight/fight";
 import { Events, type EventLight } from "./events/events";
@@ -2070,8 +2071,9 @@ export function Game({
   // Around (the row of faces under the top bar): only people online right now.
   const onlineOut = useMemo(() => peopleOut.filter((p) => p.status === "online"), [peopleOut]);
   // The Town Hall's dot: something said since you last looked (checked every minute while closed).
+  // No Town Hall in Lite: nothing to check.
   useEffect(() => {
-    if (!worldId || me.guest || townOpen) return;
+    if (!worldId || me.guest || townOpen || lite) return;
     let alive = true;
     const look = () =>
       document.visibilityState === "visible" &&
@@ -2096,7 +2098,7 @@ export function Game({
       stopLatest();
       every();
     };
-  }, [worldId, me.guest, me.id, townOpen]);
+  }, [worldId, me.guest, me.id, townOpen, lite]);
   // Everyone's card opens at once: their face and name are known from here (people/card-cache).
   useEffect(() => {
     rememberPreviews(peopleOut.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, online: p.status === "online" })));
@@ -4200,10 +4202,22 @@ export function Game({
           {challengeLights.length > 0 && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-[#ffd43b] ring-2 ring-white" />}
         </button>
       )}
-      {/* Police & Thieves: beside Play, the countdown to the next game (2am, 10am, 6pm Lagos time),
+      {/* Masquerade (docs/MASQUERADE.md): beside Play, the mask. 5 minutes masked with someone new. */}
+      {worldId && !guest && !camera && !place && ride === null && !walking && tour("masq") && (
+        <button
+          onClick={() => setMasqOpen(true)}
+          className="pointer-events-auto fixed right-[8.25rem] top-14 z-20 grid size-12 place-items-center rounded-full bg-[#17112b] shadow-lg ring-1 ring-black/5 sm:right-[9.25rem] sm:top-16"
+          aria-label="Masquerade: 5 minutes masked with someone new"
+          title="Masquerade"
+        >
+          <Mask className="w-8" />
+          {tutorialGlow === "masq" && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
+        </button>
+      )}
+      {/* Police & Thieves: beside the mask, the countdown to the next game (2am, 10am, 6pm Lagos time),
           a ring that fills as it comes closer; LIVE while one is on. Opens its lobby. */}
       {COPS_ON && worldId && !guest && !camera && !place && ride === null && !walking && tour("events") && (
-        <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[8.25rem] top-14 z-20 sm:right-[9.25rem] sm:top-16" />
+        <CopsCountdown onOpen={() => setCopsOpen(true)} className="fixed right-[12.25rem] top-14 z-20 sm:right-[13.75rem] sm:top-16" />
       )}
       {copsOpen && <CopsRobbers me={{ id: me.id, name: me.name ?? "Player", avatar: me.avatar }} onClose={() => setCopsOpen(false)} />}
       {/* Notifications off on this phone: a bell on the right, halfway down, to switch them on (gone
@@ -4246,7 +4260,7 @@ export function Game({
           }}
         />
       )}
-      {townOpen && worldId && !guest && worldRegion && (
+      {townOpen && worldId && !guest && worldRegion && !lite && (
         <TownHall
           region={worldId}
           state={worldRegion.state}
@@ -4458,7 +4472,7 @@ export function Game({
             finder={peopleFinder("chat")}
             externalNpc={npcTap}
             enteredAt={rooms.enteredAt}
-            greet={greet}
+            greet={(p) => greet(p, false)}
             friendStatusOf={friendStatusOf}
             onAddFriend={befriend}
             hideButton
@@ -4746,7 +4760,7 @@ export function Game({
       )}
       {/* The world's way to Lite: a pill above the Town Hall, and once, a note offering it. */}
       {worldId && !guest && !lite && !camera && !place && ride === null && (
-        <LiteButton onClick={() => switchLite(true)} className="absolute bottom-[9.5rem] right-3 z-20 sm:bottom-[11rem] sm:right-4" />
+        tour("lite") && <LiteButton onClick={() => switchLite(true)} glow={tutorialGlow === "lite"} className="absolute bottom-[9.5rem] right-3 z-20 sm:bottom-[11rem] sm:right-4" />
       )}
       {liteOffer && !lite && worldId && !guest && (
         <LiteOffer
@@ -4798,6 +4812,11 @@ export function Game({
               setChatOpen(false);
               setTownOpen(true);
             },
+            masquerade: () => {
+              setChatOpen(false);
+              setMasqOpen(true);
+            },
+            lite: () => switchLite(true),
             look: () => {
               setChatOpen(false);
               setMeOpen(false);

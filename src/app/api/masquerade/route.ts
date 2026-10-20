@@ -95,7 +95,7 @@ export type MasqIdle = {
 
 const ERRORS: Record<string, string> = {
   too_many: `That's ${MASQ_PER_DAY} masquerades today. Come back tomorrow!`,
-  dating_off: "Switch on Open to dating first (Dating, in the menu), or come for friends.",
+  dating_off: "Dating and spicy link-ups are for people open to dating. Switch it on first (Dating, in the menu), or come for friends.",
   not_yet: "Wait for the time to run out first.",
   too_fast: "Slow down a little.",
   gone: "That masquerade is over.",
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
   const id = Number(body?.id);
 
   if (action === "join") {
-    const mode: MasqMode = body?.mode === "dating" ? "dating" : "friends";
+    const mode: MasqMode = body?.mode === "dating" || body?.mode === "linkup" ? body.mode : "friends";
     const region = String(body?.region ?? "lagos");
     const map = regionMap(region);
     if (!map) return fail("bad_region");

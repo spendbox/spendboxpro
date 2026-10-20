@@ -4,7 +4,7 @@ import { rememberPerson } from "./people/recent-rail";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, Camera, CircleHelp, ImagePlus, LoaderCircle, MapPin, Mic, Navigation, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowLeft, Camera, CircleHelp, Ellipsis, ImagePlus, LoaderCircle, MapPin, Mic, Navigation, Newspaper, Pause, Search, SendHorizontal, UserCheck, UserPlus } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
 import { Bot, Building2, ChevronDown, ChevronUp, Coins, Fish, HotAirBalloon, Lock, LogOut, MessageCircle, Play, Users, X } from "@/components/icons";
 import type { Avatar } from "@/lib/avatar";
@@ -287,6 +287,8 @@ export function Chat({
   const [thread, setThreadNow] = useState<Thread | null>(null);
   // Newtown's own chat is open (the real map).
   const [newtownOpen, setNewtownOpen] = useState(false);
+  /** A conversation's ⋯ menu (play, give, hug, shake hands, report) is open. */
+  const [more, setMore] = useState(false);
   const setThread = (t: Thread | null) => {
     setThreadNow(t);
     if (t) setNewtownOpen(false);
@@ -1001,18 +1003,55 @@ export function Chat({
                 </p>
               )}
             </div>
-            {thread.id !== meId && thread.id !== BOT_ID && greet?.({ id: thread.id, name: thread.name })}
-            {onPlay && thread.id !== meId && thread.id !== BOT_ID && (
-              <button
-                onClick={() => onPlay({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
-                className="flex shrink-0 items-center gap-1 rounded-full bg-[#0a4127] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[#136b3f]"
-                aria-label={`Challenge ${thread.name} to a game`}
-                title="Challenge to a game"
-              >
-                🃏 <span className="hidden sm:inline">Play</span>
-              </button>
+            {/* Everything you can do with them, tucked under one ⋯ (a clean header on a phone). */}
+            {thread.id !== meId && thread.id !== BOT_ID && (greet || onPlay || onGiveCoins) && (
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setMore((v) => !v)}
+                  className="grid size-10 place-items-center rounded-full bg-panel-2 text-ink"
+                  aria-label={`More: play, give, hug or report ${thread.name}`}
+                  aria-expanded={more}
+                >
+                  <Ellipsis className="size-5" aria-hidden />
+                </button>
+                {more && (
+                  <>
+                    <button type="button" aria-label="Close the menu" className="fixed inset-0 z-10 cursor-default" onClick={() => setMore(false)} />
+                    <div className="absolute right-0 top-12 z-20 w-64 rounded-2xl bg-panel p-2 shadow-xl ring-1 ring-line">
+                      {onPlay && (
+                        <button
+                          onClick={() => {
+                            setMore(false);
+                            onPlay({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) });
+                          }}
+                          className="flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-panel-2"
+                        >
+                          <span className="grid size-8 place-items-center rounded-lg bg-[#0a4127] text-base" aria-hidden>
+                            🃏
+                          </span>
+                          Play a game
+                        </button>
+                      )}
+                      {onGiveCoins && (
+                        <button
+                          onClick={() => {
+                            setMore(false);
+                            onGiveCoins({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) });
+                          }}
+                          className="flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-bold hover:bg-panel-2"
+                        >
+                          <span className="grid size-8 place-items-center rounded-lg bg-gold/25 text-gold-dark" aria-hidden>
+                            <Coins className="size-4" />
+                          </span>
+                          Give money
+                        </button>
+                      )}
+                      {greet && <div className="flex flex-wrap gap-1.5 border-t border-line px-1 pb-1 pt-2.5">{greet({ id: thread.id, name: thread.name })}</div>}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-            {giveButton({ id: thread.id, name: thread.name, avatar: byId.get(thread.id)?.avatar ?? avatarOf(thread.id, thread.name) })}
           </>
         ) : guest ? (
           <h2 className="flex-1 px-1 font-semibold">Chat</h2>

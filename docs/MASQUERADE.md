@@ -10,14 +10,18 @@ screens `src/app/play/masquerade.tsx`; database `game-db/131_masquerade.sql` (te
 
 ## Where
 
+- **The map**: the mask button, top right beside Play (the games).
 - **Lite**: the Masquerade card at the top of Chats (how many are masked right now).
 - **Everywhere**: Masquerade in the menu (your face, People).
+- **The walkthrough** has a card on it (and players who'd finished it see it once as what's new).
 
 ## How it goes
 
 1. **Before the masks go on** (remembered on the phone):
-   - **I'm here for**: Making friends, or Dating too (only for people who've switched on Open to
-     dating; it only matches people who are both there for dating).
+   - **I'm here for**: **Friends**, **Dating**, or a **Spicy link-up 🔥** (no-strings fun between
+     adults). Dating and link-ups are only for people who've switched on Open to dating, and each
+     only meets people there for the same thing. Picking a link-up turns the spice up to extra
+     spicy (still their choice).
    - **I'd like to meet**: women, men or anyone, **aged** from and to (18 to 80+).
    - **How spicy should the questions be?** Mild, a little spicy 🌶️, spicy 🌶️🌶️ or extra spicy 🌶️🌶️🌶️.
    - **I am** a woman or a man, asked once if they haven't said (until then they only meet people

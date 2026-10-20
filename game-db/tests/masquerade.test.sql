@@ -46,6 +46,7 @@ begin
   perform pg_temp.check(masq_join(u1, 'lagos', 'friends', 0, 0, 'Yaba', 'zz', 5, 10, 'anyone', 18, 80, 1) = s, 'asking again gives the same masquerade');
 
   -- Dating needs dating switched on; friends and dating never mix.
+  perform pg_temp.fails('a spicy link-up, but not open to dating', 'dating_off', format('select masq_join(%L, %L, %L, 0, 0, null, %L, 5, 10, ''anyone'', 18, 80, 3)', u3, 'lagos', 'linkup', 'x'));
   perform pg_temp.fails('dating, but not open to it', 'dating_off', format('select masq_join(%L, %L, %L, 0, 0, null, %L, 5, 10, ''anyone'', 18, 80, 1)', u3, 'lagos', 'dating', 'x'));
   update profiles set dating_open = true where id in (u3, u4);
   perform pg_temp.check(masq_join(u3, 'lagos', 'dating', 0, 0, null, 'sc', 5, 10, 'anyone', 18, 80, 1) is null, 'dating: waits');
@@ -99,6 +100,12 @@ begin
   update masq_sessions set ends_at = now() - interval '2 minutes' where id = s;
   perform masq_expire(60);
   perform pg_temp.check((select status = 'ended' and ended_why = 'timeout' from masq_sessions where id = s), 'undecided ones end by themselves');
+
+  -- Spicy link-ups only meet spicy link-ups.
+  perform pg_temp.check(masq_join(u3, 'lagos', 'linkup', 0, 0, null, 'l1', 5, 10, 'anyone', 18, 80, 3) is null, 'a link-up waits');
+  perform pg_temp.check(masq_join(u4, 'lagos', 'dating', 0, 0, null, 'l2', 5, 10, 'anyone', 18, 80, 3) is null, 'dating never meets a link-up');
+  perform masq_cancel(u3);
+  perform masq_cancel(u4);
 
   -- Who you'd like to meet, both ways: sex and age; and each one's spice is kept.
   update profiles set gender = 'male', birth_date = current_date - interval '25 years' where id = pg_temp.uid('m5@masq.test');

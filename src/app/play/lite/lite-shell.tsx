@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays, Globe, MessageCircle, SquarePen, Users, Wallet } from "lucide-react";
 import { AvatarFace } from "@/components/avatar";
@@ -113,6 +113,7 @@ export function LiteShell({
         </div>
       </nav>
 
+      <LiteWelcome />
       {/* On the page itself, so it shows over the chats too (they're drawn there, above the game's layer). */}
       {message &&
         createPortal(
@@ -136,9 +137,10 @@ export function LiteShell({
 }
 
 /** The world's way back to Lite: a pill above the chat bubble, and once, a note offering it. */
-export function LiteButton({ onClick, className }: { onClick: () => void; className?: string }) {
+export function LiteButton({ onClick, className, glow }: { onClick: () => void; className?: string; glow?: boolean }) {
   return (
-    <button onClick={onClick} className={cn("pointer-events-auto flex h-12 items-center gap-2 rounded-full bg-white px-4 text-sm font-extrabold text-ink shadow-[0_4px_14px_rgba(0,0,0,0.18)]", className)} aria-label="Switch to Lite: chats, events, people and your wallet">
+    <button onClick={onClick} className={cn("pointer-events-auto relative flex h-12 items-center gap-2 rounded-full bg-white px-4 text-sm font-extrabold text-ink shadow-[0_4px_14px_rgba(0,0,0,0.18)]", className)} aria-label="Switch to Lite: chats, events, people and your wallet">
+      {glow && <span aria-hidden className="pointer-events-none absolute -inset-1 animate-ping rounded-full ring-4 ring-gold/70" />}
       <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <rect x="7" y="2" width="10" height="20" rx="2" />
         <path d="M11 18h2" />
@@ -165,5 +167,66 @@ export function LiteOffer({ onTry, onNo }: { onTry: () => void; onNo: () => void
         </button>
       </div>
     </div>
+  );
+}
+
+/** The first time in Lite: a few cards on what's where (once on each phone). */
+const WELCOME_KEY = "nt-lite-welcome";
+const WELCOME: { emoji: string; title: string; text: string }[] = [
+  { emoji: "📱", title: "Welcome to Lite", text: "Everything in Newtown, without the 3D map: quicker, quiet, and kinder to your data." },
+  { emoji: "🧭", title: "Four tabs", text: "Chats, Events, People and Wallet, at the bottom. Tap your face (top right) for your profile, photos and the menu." },
+  { emoji: "🎭", title: "Masquerade", text: "At the top of your chats: 5 minutes with someone new, both masked. Unmask only if you both say yes." },
+  { emoji: "🌍", title: "The city is one tap away", text: "The globe (top right) takes you to the 3D map, and the Lite button there brings you back." },
+];
+
+function LiteWelcome() {
+  const [at, setAt] = useState<number | null>(() => {
+    try {
+      return localStorage.getItem(WELCOME_KEY) ? null : 0;
+    } catch {
+      return null;
+    }
+  });
+  if (at === null || typeof document === "undefined") return null;
+  const done = () => {
+    try {
+      localStorage.setItem(WELCOME_KEY, "1");
+    } catch {}
+    setAt(null);
+  };
+  const card = WELCOME[at];
+  const last = at >= WELCOME.length - 1;
+  return createPortal(
+    <div className="fixed inset-x-0 z-[1000] flex justify-center px-4" style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}>
+      <div role="dialog" aria-label="Welcome to Lite" className="w-full max-w-sm rounded-3xl bg-ink p-4 text-white shadow-2xl ring-2 ring-gold/40">
+        <div className="flex items-start gap-3">
+          <span className="text-3xl leading-none" aria-hidden>
+            {card.emoji}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-extrabold text-gold">{card.title}</p>
+            <p className="mt-1 text-sm leading-snug text-white/85">{card.text}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex gap-1" aria-hidden>
+            {WELCOME.map((_, n) => (
+              <span key={n} className={cn("h-1.5 rounded-full", n === at ? "w-4 bg-gold" : "w-1.5 bg-white/30")} />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {!last && (
+              <button onClick={done} className="h-11 rounded-full px-3 text-sm font-semibold text-white/70">
+                Skip
+              </button>
+            )}
+            <button onClick={() => (last ? done() : setAt(at + 1))} className="h-11 rounded-full bg-gold px-5 text-sm font-extrabold text-ink">
+              {last ? "Got it" : "Next"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

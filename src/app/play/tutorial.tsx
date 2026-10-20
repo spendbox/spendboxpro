@@ -23,7 +23,7 @@ let userKey: string | null = null;
 const keyFor = (user: string | null) => (user ? `${KEY}:${user}` : KEY);
 
 /** What the walkthrough points at: that button glows. */
-export type TutorialGlow = "home" | "chat" | "events" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | null;
+export type TutorialGlow = "home" | "chat" | "events" | "camera" | "profile" | "wallet" | "dock" | "leave" | "townhall" | "masq" | "lite" | null;
 
 /** `closed`: shut with the ✕ before the end: a small help icon brings it back where it was. */
 type Saved = { phase: Phase; i: number; skipped: Mission[]; closed?: boolean };
@@ -67,6 +67,24 @@ function save(next: Saved) {
 }
 const current = () => (saved ??= typeof window === "undefined" ? FRESH : read());
 
+/**
+ * What's new, for players who'd finished the walkthrough before it was added (Masquerade and Lite):
+ * shown once, as a couple of cards. Bump to show new ones.
+ */
+const NEWS_KEY = "newtown.whatsnew.1";
+function newsSeen() {
+  try {
+    return !!localStorage.getItem(`${NEWS_KEY}:${userKey ?? ""}`);
+  } catch {
+    return true;
+  }
+}
+function markNews() {
+  try {
+    localStorage.setItem(`${NEWS_KEY}:${userKey ?? ""}`, "1");
+  } catch {}
+}
+
 /** Whose walkthrough to show: each account has its own (call before drawing, on every render). */
 export function setTutorialUser(id: string | null) {
   if (id === userKey) return;
@@ -98,7 +116,7 @@ function setGlow(g: TutorialGlow) {
  * isn't faced with all of them at once). Before the walkthrough starts (no home yet) and during
  * its opening cards, none of them; when it's done or closed, all of them.
  */
-export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "townhall" | "events" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound";
+export type TourButton = "home" | "dock" | "extras" | "camera" | "chat" | "townhall" | "events" | "reputation" | "wallet" | "profile" | "people" | "online" | "sound" | "masq" | "lite";
 /** The tips (by number, see `tips` below) that introduce each button. */
 const TIP_SHOWS: [number, TourButton[]][] = [
   [1, ["townhall"]],
@@ -107,6 +125,8 @@ const TIP_SHOWS: [number, TourButton[]][] = [
   [4, ["people", "online"]],
   [6, ["wallet"]],
   [8, ["profile", "sound"]],
+  [10, ["masq"]],
+  [11, ["lite"]],
 ];
 const MISSION_SHOWS: Record<Mission, TourButton[]> = { name: ["home", "dock"], hi: ["chat"], win: ["events", "reputation"] };
 function shownNow(): string {
@@ -158,6 +178,10 @@ export type TutorialActions = {
   look: () => void;
   /** Open the Town Hall (the state's chat). */
   townHall: () => void;
+  /** Open Masquerade (docs/MASQUERADE.md). */
+  masquerade: () => void;
+  /** Switch to Lite (docs/LITE.md). */
+  lite: () => void;
 };
 
 /** Where the card's been dragged to (kept while the game's open, so it stays out of your way). */
@@ -187,6 +211,8 @@ export function Tutorial({
   const [cheer, setCheer] = useState<string | null>(null);
   const asking = useRef(false);
   const [pos, setPos] = useState(dragged);
+  // What's new (once, for players who'd already finished): which card, or null.
+  const [newsI, setNewsI] = useState<number | null>(() => (typeof window !== "undefined" && !newsSeen() ? 0 : null));
   // "Show me" opened something: the card steps aside (a small pill) until that's closed again,
   // so it never sits on top of what it's showing.
   const [tucked, setTucked] = useState(false);
@@ -319,6 +345,20 @@ export function Tutorial({
       action: { label: "Show me", run: actions.events },
     },
   };
+  const masqCard: Card = {
+    emoji: "🎭",
+    title: "Masquerade",
+    text: "Tap the mask (top right, beside the games) to chat with someone new for 5 minutes, both masked. Pick who you'd like to meet and how spicy the questions get. If you both tap Unmask, you see each other. If not, nobody knows who said no.",
+    glow: "masq",
+    action: { label: "Try it", run: actions.masquerade },
+  };
+  const liteCard: Card = {
+    emoji: "📱",
+    title: "Lite mode",
+    text: "Short on data, or on an older phone? Tap Lite (bottom right) for Newtown without the 3D map: your chats, events, people and wallet, quick and quiet. The globe at the top brings you back to the city.",
+    glow: "lite",
+    action: { label: "Try Lite", run: actions.lite },
+  };
   const tips: Card[] = [
     { emoji: "🎉", title: "Missions complete!", text: "You're officially a Newtowner. Here are a few quick tips, then the city is yours." },
     {
@@ -369,7 +409,13 @@ export function Tutorial({
       glow: "profile",
       action: { label: "My look", run: actions.look },
     },
+    masqCard,
+    liteCard,
     { emoji: "🚀", title: "That's it. Have fun!", text: "Say hi to people, win some games, buy the block. See you around!" },
+  ];
+  const news: Card[] = [
+    { ...masqCard, title: `New: ${masqCard.title}` },
+    { ...liteCard, title: `New: ${liteCard.title}` },
   ];
 
   const server = done && done !== "off" ? done : null;
@@ -379,9 +425,20 @@ export function Tutorial({
     if (s.phase === "missions" && !mission && !cheer && (done !== null || s.skipped.length > 0)) save({ ...s, phase: "tips", i: 0 });
   }, [s, done, mission, cheer]);
 
+  const showingNews = s.phase === "done" && !s.closed && newsI !== null && newsI < news.length;
   const planned: Card | null = s.closed
     ? null
-    : s.phase === "intro" ? intro[Math.min(s.i, intro.length - 1)] : s.phase === "missions" ? (mission ? missionCards[mission] : null) : s.phase === "tips" ? tips[Math.min(s.i, tips.length - 1)] : null;
+    : s.phase === "intro"
+      ? intro[Math.min(s.i, intro.length - 1)]
+      : s.phase === "missions"
+        ? mission
+          ? missionCards[mission]
+          : null
+        : s.phase === "tips"
+          ? tips[Math.min(s.i, tips.length - 1)]
+          : showingNews
+            ? news[newsI!]
+            : null;
   // The house (and the quick buttons) are out on the map: inside a building or on a ride, first
   // step out, with the Leave button glowing (the card comes back to the house once you're out).
   const card: Card | null =
@@ -434,9 +491,18 @@ export function Tutorial({
     );
   const shown: Card = card ?? { emoji: "🎉", title: "", text: "" };
 
+  const endNews = () => {
+    markNews();
+    setNewsI(null);
+  };
   const next = () => {
     if (s.phase === "intro") return save(s.i + 1 < intro.length ? { ...s, i: s.i + 1 } : { ...s, phase: "missions", i: 0 });
-    if (s.phase === "tips") return save(s.i + 1 < tips.length ? { ...s, i: s.i + 1 } : { ...s, phase: "done", i: 0 });
+    if (s.phase === "tips") {
+      // The tips already showed what's new.
+      if (s.i + 1 >= tips.length) endNews();
+      return save(s.i + 1 < tips.length ? { ...s, i: s.i + 1 } : { ...s, phase: "done", i: 0 });
+    }
+    if (showingNews) return newsI! + 1 < news.length ? setNewsI(newsI! + 1) : endNews();
   };
   const skipMission = () => mission && save({ ...s, skipped: [...s.skipped, mission] });
   // Back: the card before (from the missions, the last opening tip; a skipped mission comes back).
@@ -447,14 +513,17 @@ export function Tutorial({
         ? () => (s.skipped.length ? save({ ...s, skipped: s.skipped.slice(0, -1) }) : save({ ...s, phase: "intro", i: intro.length - 1 }))
         : s.phase === "tips" && s.i > 0
           ? () => save({ ...s, i: s.i - 1 })
-          : null;
-  const count = s.phase === "intro" ? intro.length : s.phase === "tips" ? tips.length : 0;
-  const last = (s.phase === "intro" || s.phase === "tips") && s.i >= count - 1;
+          : showingNews && newsI! > 0
+            ? () => setNewsI(newsI! - 1)
+            : null;
+  const count = s.phase === "intro" ? intro.length : s.phase === "tips" ? tips.length : showingNews ? news.length : 0;
+  const idx = showingNews ? newsI! : s.i;
+  const last = (s.phase === "intro" || s.phase === "tips" || showingNews) && idx >= count - 1;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-28 z-[90] flex justify-center px-3 sm:top-24" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
       <div
-        key={`${s.phase}-${s.i}-${mission ?? ""}`}
+        key={`${s.phase}-${idx}-${mission ?? ""}`}
         role="dialog"
         aria-label="Walkthrough"
         // Drag it anywhere (by any part that isn't a button) to see what's under it.
@@ -482,7 +551,7 @@ export function Tutorial({
                 <p className="mt-1 text-sm leading-snug text-white/85">{shown.text}</p>
               </div>
               <button
-                onClick={() => save({ ...s, closed: true })}
+                onClick={() => (showingNews ? endNews() : save({ ...s, closed: true }))}
                 aria-label="Close the walkthrough"
                 title="Close the walkthrough (the ? button brings it back)"
                 className="-mr-1 -mt-1 grid size-7 shrink-0 place-items-center rounded-full text-white/60 hover:text-white"
@@ -493,7 +562,7 @@ export function Tutorial({
             {count > 0 && (
               <div className="mt-3 flex justify-center gap-1" aria-hidden>
                 {Array.from({ length: count }, (_, n) => (
-                  <span key={n} className={`h-1.5 rounded-full transition-all ${n === s.i ? "w-4 bg-gold" : "w-1.5 bg-white/30"}`} />
+                  <span key={n} className={`h-1.5 rounded-full transition-all ${n === idx ? "w-4 bg-gold" : "w-1.5 bg-white/30"}`} />
                 ))}
               </div>
             )}
@@ -530,7 +599,7 @@ export function Tutorial({
                   )
                 ) : (
                   <button onClick={next} className="h-9 whitespace-nowrap rounded-full bg-gold px-4 text-sm font-bold text-ink">
-                    {last ? "Let's go!" : "Next"}
+                    {last ? (showingNews ? "Got it" : "Let's go!") : "Next"}
                   </button>
                 )}
               </div>

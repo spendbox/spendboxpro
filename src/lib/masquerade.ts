@@ -11,7 +11,15 @@ export const MASQ_PER_DAY = 10;
 /** A message: at most this many letters. */
 export const MASQ_SAY_MAX = 300;
 
-export type MasqMode = "friends" | "dating";
+/** What you're here for: friends, dating, or a spicy link-up (no-strings fun between adults). */
+export type MasqMode = "friends" | "dating" | "linkup";
+export const MASQ_MODES: { mode: MasqMode; label: string; line: string }[] = [
+  { mode: "friends", label: "Friends", line: "here for friends" },
+  { mode: "dating", label: "Dating", line: "open to dating" },
+  { mode: "linkup", label: "Spicy link-up 🔥", line: "here for a spicy link-up" },
+];
+/** Dating and spicy link-ups are for people who've switched on Open to dating. */
+export const masqNeedsDating = (m: MasqMode) => m !== "friends";
 /** Who you'd like to meet. */
 export type MasqWant = "men" | "women" | "anyone";
 /** How spicy you'd like the questions: 0 mild, 1 a little, 2 spicy, 3 extra spicy. */
